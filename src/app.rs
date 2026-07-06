@@ -36,7 +36,8 @@ impl Default for MyApp {
             expr: None,
             eval: None,
         };
-        first.eval();
+        first.parse();
+        first.eval = eval(first.expr.as_ref().unwrap());
 
         Self {
             lines: vec![first],
@@ -51,13 +52,18 @@ impl Default for MyApp {
 }
 
 impl CodeLine {
-    fn eval(&mut self) {
+    fn parse(&mut self) {
         self.expr = parse(&self.text).ok();
-        self.eval = self.expr.as_ref().and_then(|expr| eval(expr));
     }
+
+    
 }
 
 impl MyApp {
+    fn eval(&mut self, index: usize) {
+        self.lines[index].eval = self.lines[index].expr.as_ref().and_then(|expr| eval(expr));
+    }
+
     fn insert(&mut self, index: usize) {
         self.last_id += 1;
         self.lines.insert(
@@ -82,7 +88,7 @@ impl eframe::App for MyApp {
 
         if self.code_panel_open {
             egui::Panel::left("code_edit").show(ui, |ui| {
-                egui::Sides::new().show(ui, |ui| {}, |ui| {
+                egui::Sides::new().show(ui, |_ui| {}, |ui| {
                     if ui.button(String::from(char::from(Icon::PanelLeftClose))).clicked() {
                         self.code_panel_open = false;
                     }
@@ -91,6 +97,7 @@ impl eframe::App for MyApp {
                 let mut insert = None;
                 let mut remove = None;
                 let mut new_focus_idx = None;
+                let mut eval = None;
 
                 let lines_len = self.lines.len();
                 for (i, line) in self.lines.iter_mut().enumerate() {
@@ -114,6 +121,9 @@ impl eframe::App for MyApp {
                     if response.has_focus() && i < lines_len - 1 && ui.input(|i| i.key_pressed(egui::Key::ArrowDown)) {
                         new_focus_idx = Some(i + 1);
                     }
+                    if response.changed() {
+                        eval = Some(i);
+                    }
                 }
                 // haxy code
                 if let Some(focus_idx) = new_focus_idx {
@@ -126,6 +136,10 @@ impl eframe::App for MyApp {
                 if let Some(index) = remove {
                     self.lines.remove(index);
                     self.focus_request = Some(self.lines[index - 1].id);
+                }
+
+                if let Some(index) = eval {
+                    self.eval(index);
                 }
             });
         } else {
@@ -237,15 +251,17 @@ impl<'a> egui::Widget for CodeLineWidget<'a> {
             ui.color_edit_button_srgba(&mut self.0.color);
             let response = ui.text_edit_singleline(&mut self.0.text);
 
-
-
             response
         }).inner;
-
+        
         if response.changed() {
-            self.0.eval();
+            self.0.parse();
         }
-
+        
+        if let Some(eval) = &self.0.eval {
+            let _ = ui.button(format!("{:?}", eval));
+        }
+        
         response
     }
 }
@@ -271,5 +287,6 @@ fn setup_fonts(ctx: &egui::Context) {
         .or_default()
         .push("lucide".to_owned());
         
+
     ctx.set_fonts(fonts);
 }

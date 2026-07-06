@@ -47,6 +47,8 @@ pub enum BinOp {
     Le,
     Gt,
     Ge,
+
+    Arrow,
 }
 
 
@@ -76,6 +78,7 @@ lazy_static::lazy_static! {
         // Each `.op()` call increases the precedence.
         // Comparators have the lowest precedence, function calls have the highest.
         PrattParser::new()
+            .op(Op::infix(arrow, Assoc::Left))
             .op(Op::infix(eq, Assoc::Left)
                 | Op::infix(ne, Assoc::Left)
                 | Op::infix(lt, Assoc::Left)
@@ -96,7 +99,20 @@ pub fn evalf(expr: &Expr) -> Option<f32> {
         &Expr::Float(f) => Some(f),
         Expr::Name(_) => None,
         Expr::Call(_) => None,
-        Expr::Bin(_) => None,
+        Expr::Bin(BinExpr { op, left, right }) => match op {
+            BinOp::Add => Some(evalf(left)? + evalf(right)?),
+            BinOp::Sub => Some(evalf(left)? - evalf(right)?),
+            BinOp::Mul => Some(evalf(left)? * evalf(right)?),
+            BinOp::Div => Some(evalf(left)? / evalf(right)?),
+            BinOp::Pow => Some(evalf(left)?.powf(evalf(right)?)),
+            BinOp::Eq => None,
+            BinOp::Ne => None,
+            BinOp::Lt => None,
+            BinOp::Le => None,
+            BinOp::Gt => None,
+            BinOp::Ge => None,
+            BinOp::Arrow => None,
+        },
         Expr::Neg(e) => evalf(e).map(|f: f32| -f),
         Expr::Factorial(_) => None,
         Expr::Circle(_) => None,
@@ -104,14 +120,13 @@ pub fn evalf(expr: &Expr) -> Option<f32> {
 }
 
 pub fn eval(expr: &Expr) -> Option<Eval> {
+    dbg!(expr);
+
     match expr {
+        Expr::Neg(_) | Expr::Float(_) | Expr::Factorial(_) | Expr::Bin(_) | Expr::Call(_) => evalf(expr).map(Eval::Float),
+
         Expr::Bad => None,
-        &Expr::Float(f) => Some(Eval::Float(f)),
-        Expr::Name(_) => None, // placeholder
-        Expr::Call(_) => None, // placeholder
-        Expr::Bin(_) => None, // placeholder
-        Expr::Neg(e) => evalf(e).map(Eval::Float),
-        Expr::Factorial(_) => None,
+        Expr::Name(_) => None,
         Expr::Circle(CircleExpr { x, y, r }) => {
             let x = evalf(x)?;
             let y = evalf(y)?;
@@ -175,6 +190,8 @@ fn parse_expr(pairs: pest::iterators::Pairs<Rule>) -> Expr {
                 Rule::le => BinOp::Le,
                 Rule::gt  => BinOp::Gt,
                 Rule::ge => BinOp::Ge,
+
+                Rule::arrow => BinOp::Arrow,
                 _ => unreachable!(),
             };
             Expr::Bin(BinExpr { op, left: Box::new(left), right: Box::new(right) })
@@ -183,7 +200,7 @@ fn parse_expr(pairs: pest::iterators::Pairs<Rule>) -> Expr {
 }
 
 pub fn parse(input: &str) -> Result<Expr, pest::error::Error<Rule>> {
-    let pairs = LeParser::parse(Rule::circle, input)?;
+    let pairs = LeParser::parse(Rule::expr, input)?;
     let ast = parse_expr(pairs);
     Ok(ast)
 }

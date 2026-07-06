@@ -19,8 +19,10 @@ ge = { ">=" }
 gt  = { ">" }
 log_op = _{ eq | ne | le | lt | ge | gt }
 
+arrow = { "->" }
+
 // Infix grouping
-infix = _{ math_op | log_op }
+infix = _{ arrow | math_op | log_op }
 
 // Unary prefix (e.g., -x or !x)
 neg = { "-" }
