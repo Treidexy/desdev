@@ -1,0 +1,40 @@
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
+
+number = @{ ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? }
+name  = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }
+
+// Operators
+add = { "+" }
+sub = { "-" }
+mul = { "*" }
+div = { "/" }
+pow = { "^" }
+math_op = _{ add | sub | mul | div | pow }
+
+eq  = { "==" }
+ne = { "!=" }
+le = { "<=" }
+lt  = { "<" }
+ge = { ">=" }
+gt  = { ">" }
+log_op = _{ eq | ne | le | lt | ge | gt }
+
+// Infix grouping
+infix = _{ math_op | log_op }
+
+// Unary prefix (e.g., -x or !x)
+neg = { "-" }
+prefix = _{ neg }
+
+// Function calls act as a postfix operator applied to an name or expression
+call = { "(" ~ (expr ~ ("," ~ expr)*)? ~ ")" }
+factorial = { "!" }
+postfix = _{ call | factorial }
+
+// Primaries are the base elements
+circle = { "circle(" ~ (expr ~ ("," ~ expr)*)? ~ ")" }
+primary = _{ circle | number | name | "(" ~ expr ~ ")" }
+
+// The exact flat structure the Pest Pratt parser expects
+secondary = _{ prefix* ~ primary ~ postfix* }
+expr = { secondary ~ (infix ~ secondary)* }
