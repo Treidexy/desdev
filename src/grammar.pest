@@ -40,4 +40,7 @@ primary = _{ circle | number | name | "(" ~ expr ~ ")" }
 // The exact flat structure the Pest Pratt parser expects
 secondary = _{ prefix* ~ primary ~ postfix* }
 expr = { secondary ~ (infix ~ secondary)* }
-line = _{ SOI ~ expr ~ EOI }
+
+assign = { "let" ~ name ~ eq ~ number }
+
+line = _{ SOI ~ (assign) ~ EOI }

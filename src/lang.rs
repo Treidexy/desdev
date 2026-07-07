@@ -1,3 +1,5 @@
+use eframe::wgpu::naga::MathFunction::Exp;
+use log::error;
 use pest::{Parser, pratt_parser::{Assoc, Op, PrattParser}};
 use pest_derive::Parser;
 
@@ -5,6 +7,7 @@ use pest_derive::Parser;
 pub enum Eval {
     Float(f32),
     Circle(CircleEval),
+    Assign(AssignEval),
 }
 
 #[derive(Debug)]
@@ -18,6 +21,7 @@ pub enum Expr {
     Neg(Box<Expr>),
     Factorial(Box<Expr>),
     Circle(CircleExpr),
+    Assign(AssignExpr),
 }
 
 #[derive(Debug)]
@@ -64,6 +68,18 @@ pub struct CircleEval {
     pub x: f32,
     pub y: f32,
     pub r: f32,
+}
+
+#[derive(Debug)]
+pub struct AssignExpr {
+    pub name: String,
+    pub val: Box<Expr>,
+}
+
+#[derive(Debug)]
+pub struct AssignEval {
+    pub name: String,
+    pub val: f32,
 }
 
 
@@ -116,6 +132,7 @@ pub fn evalf(expr: &Expr) -> Option<f32> {
         Expr::Neg(e) => evalf(e).map(|f: f32| -f),
         Expr::Factorial(_) => None,
         Expr::Circle(_) => None,
+        Expr::Assign(AssignExpr { name, val }) => evalf(val),
     }
 }
 
@@ -132,6 +149,10 @@ pub fn eval(expr: &Expr) -> Option<Eval> {
             let y = evalf(y)?;
             let r = evalf(r)?;
             Some(Eval::Circle(CircleEval { x, y, r }))
+        }
+        Expr::Assign(AssignExpr { name, val }) => {
+            let val = evalf(val)?;
+            Some(Eval::Assign(AssignEval { name: name.clone(), val }))
         }
     }
 }
@@ -155,6 +176,18 @@ fn parse_expr(pairs: pest::iterators::Pairs<Rule>) -> Expr {
                 let r = Box::new(parse_expr(r.into_inner()));
                 Expr::Circle(CircleExpr { x, y, r })
             },
+            Rule::assign => {
+                let mut args = primary.into_inner();
+                let Some(name) = args.next() else {
+                    return Expr::Bad;
+                };
+                let Some(val) = args.next() else {
+                    return Expr::Bad;
+                };
+                let name = name.as_str().to_string();
+                let val = Box::new(parse_expr(val.into_inner()));
+                Expr::Assign(AssignExpr { name, val })
+            }
             Rule::number => Expr::Float(primary.as_str().parse().unwrap()),
             Rule::name => Expr::Name(primary.as_str().to_string()),
             // If it's parentheses, we evaluate the inner expression

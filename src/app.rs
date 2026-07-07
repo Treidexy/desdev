@@ -1,8 +1,14 @@
+use std::collections::HashMap;
+
 use eframe::egui::{self, Color32};
 use lucide_icons::Icon;
 use rand::seq::IndexedRandom;
 
 use crate::lang::*;
+
+struct GameState {
+    vars: HashMap<String, f32>,
+}
 
 struct CodeLine {
     id: usize,
@@ -37,7 +43,7 @@ impl Default for MyApp {
             eval: None,
         };
         first.parse();
-        first.eval = eval(first.expr.as_ref().unwrap());
+        // first.eval = eval(first.expr.as_ref().unwrap());
 
         Self {
             lines: vec![first],
@@ -92,10 +98,14 @@ impl eframe::App for MyApp {
                     }
                 });
 
-                let mut insert = None;
-                let mut remove = None;
-                let mut new_focus_idx = None;
-                let mut eval = None;
+                enum Action {
+                    None,
+                    Insert(usize),
+                    Remove(usize),
+                    Focus(usize),
+                    Eval(usize),
+                }
+                let mut action = Action::None;
 
                 let lines_len = self.lines.len();
                 for (i, line) in self.lines.iter_mut().enumerate() {
@@ -108,36 +118,31 @@ impl eframe::App for MyApp {
                         self.focus_request = None;
                     }
                     if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-                        insert = Some(i);
+                        action = Action::Insert(i);
                     }
-                    if response.has_focus() && was_empty && ui.input(|i| i.key_pressed(egui::Key::Backspace)) {
-                        remove = Some(i);
+                    if i > 0 && response.has_focus() && was_empty && ui.input(|i| i.key_pressed(egui::Key::Backspace)) {
+                        action = Action::Remove(i);
                     }
                     if response.has_focus() && i > 0 && ui.input(|i| i.key_pressed(egui::Key::ArrowUp)) {
-                        new_focus_idx = Some(i - 1);
+                        action = Action::Focus(i - 1);
                     }
                     if response.has_focus() && i < lines_len - 1 && ui.input(|i| i.key_pressed(egui::Key::ArrowDown)) {
-                        new_focus_idx = Some(i + 1);
+                        action = Action::Focus(i + 1);
                     }
                     if response.changed() {
-                        eval = Some(i);
+                        action = Action::Eval(i);
                     }
                 }
-                // haxy code
-                if let Some(focus_idx) = new_focus_idx {
-                    self.focus_request = Some(self.lines[focus_idx].id);
-                }
-                
-                if let Some(index) = insert {
-                    self.insert(index);
-                }
-                if let Some(index) = remove {
-                    self.lines.remove(index);
-                    self.focus_request = Some(self.lines[index - 1].id);
-                }
 
-                if let Some(index) = eval {
-                    self.eval(index);
+                match action {
+                    Action::None => {},
+                    Action::Insert(index) => self.insert(index),
+                    Action::Remove(index) => {
+                        self.lines.remove(index);
+                        self.focus_request = Some(self.lines[index - 1].id);
+                    },
+                    Action::Focus(index) => self.focus_request = Some(self.lines[index].id),
+                    Action::Eval(index) => self.eval(index),
                 }
             });
         } else {
