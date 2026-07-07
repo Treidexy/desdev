@@ -210,6 +210,9 @@ fn parse_expr(pairs: pest::iterators::Pairs<Rule>) -> Expr {
             _ => unreachable!(),
         })
         .map_infix(|left, op, right| {
+            dbg!(left, op, right);
+            panic!();
+
             let op = match op.as_rule() {
                 Rule::add => BinOp::Add,
                 Rule::sub => BinOp::Sub,
