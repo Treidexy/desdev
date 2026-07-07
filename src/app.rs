@@ -24,6 +24,8 @@ struct MyApp {
     focus_request: Option<usize>,
     code_panel_open: bool,
 
+    state: GameState,
+
     pan: egui::Vec2,
     zoom: f32,
 }
@@ -51,6 +53,8 @@ impl Default for MyApp {
             focus_request: Some(0),
             code_panel_open: true,
 
+            state: GameState { vars: HashMap::new() },
+
             pan: egui::vec2(0.0, 0.0),
             zoom: 1.0,
         }
@@ -65,7 +69,25 @@ impl CodeLine {
 
 impl MyApp {
     fn eval(&mut self, index: usize) {
-        self.lines[index].eval = self.lines[index].expr.as_ref().map_or(None, |e| eval(e));
+        let Some(expr) = self.lines[index].expr.as_ref() else {
+            self.lines[index].eval = None;
+            return;
+        };
+
+        match expr {
+            Expr::Name(name) => {
+                let eval = self.state.vars.get(name).map(|&v| Eval::Float(v));
+                self.lines[index].eval = eval;
+                return;
+            },
+            _ => {},
+        }
+
+        let eval = eval(expr);
+        if let Some(Eval::Assign(AssignEval { name, val })) = eval.as_ref() {
+            self.state.vars.insert(name.clone(), *val);
+        }
+        self.lines[index].eval = eval;
     }
 
     fn insert(&mut self, index: usize) {

@@ -176,18 +176,6 @@ fn parse_expr(pairs: pest::iterators::Pairs<Rule>) -> Expr {
                 let r = Box::new(parse_expr(r.into_inner()));
                 Expr::Circle(CircleExpr { x, y, r })
             },
-            Rule::assign => {
-                let mut args = primary.into_inner();
-                let Some(name) = args.next() else {
-                    return Expr::Bad;
-                };
-                let Some(val) = args.next() else {
-                    return Expr::Bad;
-                };
-                let name = name.as_str().to_string();
-                let val = Box::new(parse_expr(val.into_inner()));
-                Expr::Assign(AssignExpr { name, val })
-            }
             Rule::number => Expr::Float(primary.as_str().parse().unwrap()),
             Rule::name => Expr::Name(primary.as_str().to_string()),
             // If it's parentheses, we evaluate the inner expression
@@ -210,9 +198,6 @@ fn parse_expr(pairs: pest::iterators::Pairs<Rule>) -> Expr {
             _ => unreachable!(),
         })
         .map_infix(|left, op, right| {
-            dbg!(left, op, right);
-            panic!();
-
             let op = match op.as_rule() {
                 Rule::add => BinOp::Add,
                 Rule::sub => BinOp::Sub,
@@ -220,7 +205,14 @@ fn parse_expr(pairs: pest::iterators::Pairs<Rule>) -> Expr {
                 Rule::div => BinOp::Div,
                 Rule::pow => BinOp::Pow,
 
-                Rule::eq  => BinOp::Eq,
+                Rule::eq  => {
+                    // bc pest is a fucking imbecile
+                    if let Expr::Name(name) = left {
+                        return Expr::Assign(AssignExpr { name, val: Box::new(right), })
+                    }
+
+                    BinOp::Eq
+                },
                 Rule::ne => BinOp::Ne,
                 Rule::lt  => BinOp::Lt,
                 Rule::le => BinOp::Le,

@@ -35,12 +35,10 @@ postfix = _{ call | factorial }
 
 // Primaries are the base elements
 circle = { "circle(" ~ (expr ~ ("," ~ expr)*)? ~ ")" }
-primary = _{ assign | circle | number | name | "(" ~ expr ~ ")" }
+primary = _{ circle | number | name | "(" ~ expr ~ ")" }
 
 // The exact flat structure the Pest Pratt parser expects
 secondary = _{ prefix* ~ primary ~ postfix* }
 expr = { secondary ~ (infix ~ secondary)* }
 
-assign = { "let" ~ name ~ eq ~ number }
-
-line = _{ SOI ~ (assign) ~ EOI }
+line = _{ SOI ~ expr ~ EOI }
