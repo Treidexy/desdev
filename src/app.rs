@@ -1,4 +1,4 @@
-use eframe::{egui::{self, Color32}, wgpu::naga::MathFunction::Exp};
+use eframe::egui::{self, Color32};
 use lucide_icons::Icon;
 use rand::seq::IndexedRandom;
 
@@ -54,14 +54,12 @@ impl Default for MyApp {
 impl CodeLine {
     fn parse(&mut self) {
         self.expr = parse(&self.text).ok();
-    }
-
-    
+    }   
 }
 
 impl MyApp {
     fn eval(&mut self, index: usize) {
-        self.lines[index].eval = self.lines[index].expr.as_ref().and_then(|expr| eval(expr));
+        self.lines[index].eval = self.lines[index].expr.as_ref().map_or(None, |e| eval(e));
     }
 
     fn insert(&mut self, index: usize) {
@@ -257,7 +255,10 @@ impl<'a> egui::Widget for CodeLineWidget<'a> {
         if response.changed() {
             self.0.parse();
         }
-        
+
+        if let Some(expr) = &self.0.expr {
+            ui.label(format!("{:?}", expr));
+        }        
         if let Some(eval) = &self.0.eval {
             let _ = ui.button(format!("{:?}", eval));
         }

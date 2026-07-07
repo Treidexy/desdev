@@ -14,7 +14,7 @@ pub enum Expr {
     Name(String),
     Call(CallExpr),
     Bin(BinExpr),
-
+    
     Neg(Box<Expr>),
     Factorial(Box<Expr>),
     Circle(CircleExpr),
@@ -200,7 +200,8 @@ fn parse_expr(pairs: pest::iterators::Pairs<Rule>) -> Expr {
 }
 
 pub fn parse(input: &str) -> Result<Expr, pest::error::Error<Rule>> {
-    let pairs = LeParser::parse(Rule::expr, input)?;
+    let mut pairs = LeParser::parse(Rule::line, input)?;
+    let pairs = pairs.next().unwrap().into_inner();
     let ast = parse_expr(pairs);
     Ok(ast)
 }
