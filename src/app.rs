@@ -191,6 +191,23 @@ impl MyApp {
         );
         self.focus_request = Some(self.last_id);
     }
+
+    fn remove(&mut self, index: usize) {
+        let line = self.lines.remove(index);
+        
+        let mut rem_name = None;
+        for (name, &id) in &self.state.var_defs {
+            if line.id == id {
+                rem_name = Some(name.clone());
+            }
+        }
+        if let Some(name) = rem_name {
+            self.state.var_defs.remove(&name);
+            self.state.vars.remove(&name);
+        }
+
+        self.focus_request = Some(self.lines[index - 1].id);
+    }
 }
 
 impl eframe::App for MyApp {
@@ -216,22 +233,7 @@ impl eframe::App for MyApp {
                 match action {
                     None => {},
                     Some(CodeAction::Insert(index)) => self.insert(index),
-                    Some(CodeAction::Remove(index)) => {
-                        let line = self.lines.remove(index);
-
-                        // todo add proper remove procedure
-                        let mut rem_name = None;
-                        for (name, &id) in &self.state.var_defs {
-                            if line.id == id {
-                                rem_name = Some(name.clone());
-                            }
-                        }
-                        if let Some(name) = rem_name {
-                            self.state.var_defs.remove(&name);
-                        }
-
-                        self.focus_request = Some(self.lines[index - 1].id);
-                    },
+                    Some(CodeAction::Remove(index)) => self.remove(index),
                     Some(CodeAction::Focus(index)) => self.focus_request = Some(self.lines[index].id),
                     Some(CodeAction::Run(index)) => {
                         let Some(Eval::Assign(assign)) = &self.lines[index].eval else {
@@ -345,14 +347,15 @@ impl eframe::App for MyApp {
 impl MyApp {
     fn show_code_line(&mut self, index: usize, ui: &mut egui::Ui) -> Option<CodeAction> {
         let line = &mut self.lines[index];
-        let was_empty = line.text.is_empty();
         enum Response {
             Egui(egui::Response),
             Run,
+            Remove,
             ParseEval,
         }
         let response = ui
             .push_id(line.id, |ui| {
+                let was_empty = line.text.is_empty();
                 let response = ui.horizontal(|ui| {
                     match line.eval {
                         Some(Eval::Circle(_)) => {
@@ -370,10 +373,13 @@ impl MyApp {
                 }).inner;
                 let response = match response {
                     Response::Egui(response) => response,
-                    Response::Run => return Response::Run,
-                    Response::ParseEval => return Response::ParseEval,
+                    _ => return response,
                 };
                 if response.changed() {
+                    if index > 0 && response.has_focus() && was_empty && ui.input(|i| i.key_pressed(egui::Key::Backspace)) {
+                        println!("remove");
+                        return Response::Remove;
+                    }
                     return Response::ParseEval;
                 }
 
@@ -399,6 +405,7 @@ impl MyApp {
         let response = match response {
             Response::Egui(response) => response,
             Response::Run => return Some(CodeAction::Run(index)),
+            Response::Remove => return Some(CodeAction::Remove(index)),
             Response::ParseEval => {
                 line.expr = parse(&line.text).ok();
                 self.code_eval(index);
@@ -412,9 +419,6 @@ impl MyApp {
         }
         if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
             return Some(CodeAction::Insert(index));
-        }
-        if index > 0 && response.has_focus() && was_empty && ui.input(|i| i.key_pressed(egui::Key::Backspace)) {
-            return Some(CodeAction::Remove(index));
         }
         if response.has_focus() && index > 0 && ui.input(|i| i.key_pressed(egui::Key::ArrowUp)) {
             return Some(CodeAction::Focus(index - 1));
