@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use eframe::egui::{self, Color32};
+use log::error;
 use lucide_icons::Icon;
 use rand::seq::IndexedRandom;
 
@@ -16,6 +17,14 @@ struct CodeLine {
     color: Color32,
     expr: Option<Expr>,
     eval: Option<Eval>,
+}
+
+enum CodeAction {
+    Insert(usize),
+    Remove(usize),
+    Focus(usize),
+    Eval(usize),
+    Run(usize),
 }
 
 struct MyApp {
@@ -44,10 +53,9 @@ impl Default for MyApp {
             expr: None,
             eval: None,
         };
-        first.parse();
-        // first.eval = eval(first.expr.as_ref().unwrap());
+        first.expr = parse(&first.text).ok();
 
-        Self {
+        let mut app = Self {
             lines: vec![first],
             last_id: 0,
             focus_request: Some(0),
@@ -57,18 +65,65 @@ impl Default for MyApp {
 
             pan: egui::vec2(0.0, 0.0),
             zoom: 1.0,
-        }
+        };
+
+        let eval = app.lines[0]
+            .expr
+            .as_ref()
+            .and_then(|expr| app.eval(expr));
+        app.lines[0].eval = eval;
+        app
     }
 }
 
-impl CodeLine {
-    fn parse(&mut self) {
-        self.expr = parse(&self.text).ok();
-    }   
-}
-
 impl MyApp {
-    fn eval(&mut self, index: usize) {
+    fn evalf(&self, expr: &Expr) -> Option<f32> {
+        match expr {
+            Expr::Bad => None,
+            &Expr::Float(f) => Some(f),
+            Expr::Name(name) => self.state.vars.get(name).copied(),
+            Expr::Call(_) => None,
+            Expr::Bin(BinExpr { op, left, right }) => match op {
+                BinOp::Add => Some(self.evalf(left)? + self.evalf(right)?),
+                BinOp::Sub => Some(self.evalf(left)? - self.evalf(right)?),
+                BinOp::Mul => Some(self.evalf(left)? * self.evalf(right)?),
+                BinOp::Div => Some(self.evalf(left)? / self.evalf(right)?),
+                BinOp::Pow => Some(self.evalf(left)?.powf(self.evalf(right)?)),
+                BinOp::Eq => None,
+                BinOp::Ne => None,
+                BinOp::Lt => None,
+                BinOp::Le => None,
+                BinOp::Gt => None,
+                BinOp::Ge => None,
+                BinOp::Arrow => None,
+            },
+            Expr::Neg(e) => self.evalf(e).map(|f: f32| -f),
+            Expr::Factorial(_) => None,
+            Expr::Circle(_) => None,
+            Expr::Assign(_) => None,
+        }
+    }
+
+    fn eval(&self, expr: &Expr) -> Option<Eval> {
+        match expr {
+            Expr::Neg(_) | Expr::Float(_) | Expr::Factorial(_) | Expr::Bin(_) | Expr::Call(_) => self.evalf(expr).map(Eval::Float),
+
+            Expr::Bad => None,
+            Expr::Name(_) => None,
+            Expr::Circle(CircleExpr { x, y, r }) => {
+                let x = self.evalf(x)?;
+                let y = self.evalf(y)?;
+                let r = self.evalf(r)?;
+                Some(Eval::Circle(CircleEval { x, y, r }))
+            }
+            Expr::Assign(AssignExpr { name, val }) => {
+                let val = self.evalf(val)?;
+                Some(Eval::Assign(AssignEval { name: name.clone(), val }))
+            }
+        }
+    }
+
+    fn code_eval(&mut self, index: usize) {
         let Some(expr) = self.lines[index].expr.as_ref() else {
             self.lines[index].eval = None;
             return;
@@ -83,11 +138,18 @@ impl MyApp {
             _ => {},
         }
 
-        let eval = eval(expr);
-        if let Some(Eval::Assign(AssignEval { name, val })) = eval.as_ref() {
-            self.state.vars.insert(name.clone(), *val);
+        let eval = self.eval(expr);
+        if let Some(Eval::Assign(assign)) = eval.as_ref() {
+            self.assign(assign.clone());
         }
         self.lines[index].eval = eval;
+    }
+
+    fn assign(&mut self, AssignEval { name, val }: AssignEval) {
+        self.state.vars.insert(name, val);
+        for i in 0..self.lines.len() {
+            self.code_eval(i);
+        }
     }
 
     fn insert(&mut self, index: usize) {
@@ -120,51 +182,30 @@ impl eframe::App for MyApp {
                     }
                 });
 
-                enum Action {
-                    None,
-                    Insert(usize),
-                    Remove(usize),
-                    Focus(usize),
-                    Eval(usize),
-                }
-                let mut action = Action::None;
-
-                let lines_len = self.lines.len();
-                for (i, line) in self.lines.iter_mut().enumerate() {
-                    let was_empty = line.text.is_empty();
-                    let response = ui
-                        .push_id(line.id, |ui| ui.add(CodeLineWidget(line)))
-                        .inner;
-                    if let Some(focus_request) = self.focus_request && line.id == focus_request {
-                        response.request_focus();
-                        self.focus_request = None;
-                    }
-                    if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-                        action = Action::Insert(i);
-                    }
-                    if i > 0 && response.has_focus() && was_empty && ui.input(|i| i.key_pressed(egui::Key::Backspace)) {
-                        action = Action::Remove(i);
-                    }
-                    if response.has_focus() && i > 0 && ui.input(|i| i.key_pressed(egui::Key::ArrowUp)) {
-                        action = Action::Focus(i - 1);
-                    }
-                    if response.has_focus() && i < lines_len - 1 && ui.input(|i| i.key_pressed(egui::Key::ArrowDown)) {
-                        action = Action::Focus(i + 1);
-                    }
-                    if response.changed() {
-                        action = Action::Eval(i);
-                    }
+                // should this be part of self?
+                let mut action = None;
+                for i in 0..self.lines.len() {
+                    action = action.or(self.show_code_line(i, ui));
                 }
 
                 match action {
-                    Action::None => {},
-                    Action::Insert(index) => self.insert(index),
-                    Action::Remove(index) => {
+                    None => {},
+                    Some(CodeAction::Insert(index)) => self.insert(index),
+                    Some(CodeAction::Remove(index)) => {
                         self.lines.remove(index);
                         self.focus_request = Some(self.lines[index - 1].id);
                     },
-                    Action::Focus(index) => self.focus_request = Some(self.lines[index].id),
-                    Action::Eval(index) => self.eval(index),
+                    Some(CodeAction::Focus(index)) => self.focus_request = Some(self.lines[index].id),
+                    Some(CodeAction::Eval(index)) => {
+                        self.code_eval(index);
+                        self.focus_request = Some(self.lines[index].id);
+                    },
+                    Some(CodeAction::Run(index)) => {
+                        let Some(Eval::Assign(assign)) = &self.lines[index].eval else {
+                            panic!("this shouldnt be possible");
+                        };
+                        self.assign(assign.clone());
+                    }
                 }
             });
         } else {
@@ -268,32 +309,85 @@ impl eframe::App for MyApp {
     }
 }
 
-struct CodeLineWidget<'a>(&'a mut CodeLine);
+impl MyApp {
+    fn show_code_line(&mut self, index: usize, ui: &mut egui::Ui) -> Option<CodeAction> {
+        let line = &mut self.lines[index];
+        let was_empty = line.text.is_empty();
+        enum Response2 {
+            Egui(egui::Response),
+            Run,
+            Eval,
+        }
+        let response = ui
+            .push_id(line.id, |ui| {
+                enum Response1 {
+                    Egui(egui::Response),
+                    Run,
+                }
+                let response = ui.horizontal(|ui| {
+                    match line.eval {
+                        Some(Eval::Circle(_)) => {
+                            ui.color_edit_button_srgba(&mut line.color);
+                        },
+                        Some(Eval::Assign(_)) => {
+                            if ui.button("->").clicked() {
+                                return Response1::Run;
+                            }
+                        },
+                        _ => {},
+                    };
+                    let response = ui.text_edit_singleline(&mut line.text);
+                    Response1::Egui(response)
+                }).inner;
+                let response = match response {
+                    Response1::Egui(response) => response,
+                    Response1::Run => return Response2::Run,
+                };
+                
+                if response.changed() {
+                    line.expr = parse(&line.text).ok();
+                }
 
-impl<'a> egui::Widget for CodeLineWidget<'a> {
-    fn ui(self, ui: &mut egui::Ui) -> egui::Response {
-        let response = ui.horizontal(|ui| {
-            ui.color_edit_button_srgba(&mut self.0.color);
-            let response = ui.text_edit_singleline(&mut self.0.text);
-
-            response
-        }).inner;
+                if let Some(expr) = &line.expr {
+                    ui.label(format!("{:?}", expr));
+                }        
+                if let Some(eval) = &line.eval {
+                    if ui.button(format!("{:?}", eval)).clicked() {
+                        return Response2::Eval;
+                    }
+                }
+                Response2::Egui(response)
+            })
+            .inner;
+        let response = match response {
+            Response2::Egui(response) => response,
+            Response2::Run => return Some(CodeAction::Run(index)),
+            Response2::Eval => return Some(CodeAction::Eval(index)),
+        };
         
+        if let Some(focus_request) = self.focus_request && line.id == focus_request {
+            response.request_focus();
+            self.focus_request = None;
+        }
+        if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+            return Some(CodeAction::Insert(index));
+        }
+        if index > 0 && response.has_focus() && was_empty && ui.input(|i| i.key_pressed(egui::Key::Backspace)) {
+            return Some(CodeAction::Remove(index));
+        }
+        if response.has_focus() && index > 0 && ui.input(|i| i.key_pressed(egui::Key::ArrowUp)) {
+            return Some(CodeAction::Focus(index - 1));
+        }
+        if response.has_focus() && index < self.lines.len() - 1 && ui.input(|i| i.key_pressed(egui::Key::ArrowDown)) {
+            return Some(CodeAction::Focus(index + 1));
+        }
         if response.changed() {
-            self.0.parse();
+            return Some(CodeAction::Eval(index));
         }
 
-        if let Some(expr) = &self.0.expr {
-            ui.label(format!("{:?}", expr));
-        }        
-        if let Some(eval) = &self.0.eval {
-            let _ = ui.button(format!("{:?}", eval));
-        }
-        
-        response
+        return None;
     }
 }
-
 
 fn rand_color() -> Color32 {
     *[Color32::RED, Color32::ORANGE, Color32::YELLOW, Color32::GREEN, Color32::CYAN, Color32::BLUE, Color32::PURPLE].choose(&mut rand::rng()).unwrap()

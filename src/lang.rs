@@ -74,7 +74,7 @@ pub struct AssignExpr {
     pub val: Box<Expr>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AssignEval {
     pub name: String,
     pub val: f32,
@@ -105,54 +105,6 @@ lazy_static::lazy_static! {
             .op(Op::prefix(neg))
             .op(Op::postfix(call) | Op::postfix(factorial))
     };
-}
-
-pub fn evalf(expr: &Expr) -> Option<f32> {
-    match expr {
-        Expr::Bad => None,
-        &Expr::Float(f) => Some(f),
-        Expr::Name(_) => None,
-        Expr::Call(_) => None,
-        Expr::Bin(BinExpr { op, left, right }) => match op {
-            BinOp::Add => Some(evalf(left)? + evalf(right)?),
-            BinOp::Sub => Some(evalf(left)? - evalf(right)?),
-            BinOp::Mul => Some(evalf(left)? * evalf(right)?),
-            BinOp::Div => Some(evalf(left)? / evalf(right)?),
-            BinOp::Pow => Some(evalf(left)?.powf(evalf(right)?)),
-            BinOp::Eq => None,
-            BinOp::Ne => None,
-            BinOp::Lt => None,
-            BinOp::Le => None,
-            BinOp::Gt => None,
-            BinOp::Ge => None,
-            BinOp::Arrow => None,
-        },
-        Expr::Neg(e) => evalf(e).map(|f: f32| -f),
-        Expr::Factorial(_) => None,
-        Expr::Circle(_) => None,
-        Expr::Assign(AssignExpr { name, val }) => evalf(val),
-    }
-}
-
-pub fn eval(expr: &Expr) -> Option<Eval> {
-    dbg!(expr);
-
-    match expr {
-        Expr::Neg(_) | Expr::Float(_) | Expr::Factorial(_) | Expr::Bin(_) | Expr::Call(_) => evalf(expr).map(Eval::Float),
-
-        Expr::Bad => None,
-        Expr::Name(_) => None,
-        Expr::Circle(CircleExpr { x, y, r }) => {
-            let x = evalf(x)?;
-            let y = evalf(y)?;
-            let r = evalf(r)?;
-            Some(Eval::Circle(CircleEval { x, y, r }))
-        }
-        Expr::Assign(AssignExpr { name, val }) => {
-            let val = evalf(val)?;
-            Some(Eval::Assign(AssignEval { name: name.clone(), val }))
-        }
-    }
 }
 
 fn parse_expr(pairs: pest::iterators::Pairs<Rule>) -> Expr {
@@ -203,21 +155,21 @@ fn parse_expr(pairs: pest::iterators::Pairs<Rule>) -> Expr {
                 Rule::div => BinOp::Div,
                 Rule::pow => BinOp::Pow,
 
-                Rule::eq  => {
-                    // bc pest is a fucking imbecile
-                    if let Expr::Name(name) = left {
-                        return Expr::Assign(AssignExpr { name, val: Box::new(right), })
-                    }
-
-                    BinOp::Eq
-                },
+                Rule::eq  => BinOp::Eq,
                 Rule::ne => BinOp::Ne,
                 Rule::lt  => BinOp::Lt,
                 Rule::le => BinOp::Le,
                 Rule::gt  => BinOp::Gt,
                 Rule::ge => BinOp::Ge,
 
-                Rule::arrow => BinOp::Arrow,
+                Rule::arrow => {
+                    // haxy (maybe I'll impl references...)
+                    if let Expr::Name(name) = left {
+                        return Expr::Assign(AssignExpr { name, val: Box::new(right), })
+                    }
+
+                    BinOp::Arrow
+                },
                 _ => unreachable!(),
             };
             Expr::Bin(BinExpr { op, left: Box::new(left), right: Box::new(right) })
