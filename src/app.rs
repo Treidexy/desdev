@@ -362,7 +362,7 @@ impl MyApp {
                             ui.color_edit_button_srgba(&mut line.color);
                         },
                         Some(Eval::Assign(_)) => {
-                            if ui.button("->").clicked() {
+                            if ui.button(String::from(char::from(Icon::Play))).clicked() {
                                 return Response::Run;
                             }
                         },
@@ -435,6 +435,7 @@ fn rand_color() -> Color32 {
     *[Color32::RED, Color32::ORANGE, Color32::YELLOW, Color32::GREEN, Color32::CYAN, Color32::BLUE, Color32::PURPLE].choose(&mut rand::rng()).unwrap()
 }
 
+// gemini
 fn setup_fonts(ctx: &egui::Context) {
     let mut fonts = egui::FontDefinitions::default();
     
@@ -451,6 +452,5 @@ fn setup_fonts(ctx: &egui::Context) {
         .or_default()
         .push("lucide".to_owned());
         
-
     ctx.set_fonts(fonts);
 }
