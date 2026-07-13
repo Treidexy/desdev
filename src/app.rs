@@ -167,12 +167,15 @@ impl MyApp {
     }
 
     fn assign(&mut self, AssignEval { name, val }: AssignEval) {
-        self.state.vars.insert(name, val);
-        // todo: have it edit definition
-        // rn it does absolutely nothing bc it doesnt edit definition, so defintion just reupdates state
-        for i in 0..self.lines.len() {
-            self.code_eval(i);
-        }
+        // todo not it be lazy
+        let Some(&id) = self.state.var_defs.get(&name) else {
+            todo!()
+        };
+
+        let (index, line) = self.lines.iter_mut().enumerate().filter(|(_, line)| line.id == id).next().unwrap();
+        line.text = format!("{name} = {val}");
+        line.expr = parse(&line.text).ok();
+        self.code_eval(index);
     }
 
     fn insert(&mut self, index: usize) {
