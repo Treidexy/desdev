@@ -9,7 +9,7 @@ sub = { "-" }
 mul = { "*" }
 div = { "/" }
 pow = { "^" }
-math_op = _{ add | sub | mul | div | pow }
+arith_op = _{ add | sub | mul | div | pow }
 
 eq  = { "=" }
 ne = { "!=" }
@@ -17,12 +17,12 @@ le = { "<=" }
 lt  = { "<" }
 ge = { ">=" }
 gt  = { ">" }
-log_op = _{ eq | ne | le | lt | ge | gt }
+logic_op = _{ eq | ne | le | lt | ge | gt }
 
 arrow = { "->" }
 
 // Infix grouping
-infix = _{ arrow | math_op | log_op }
+infix = _{ arrow | arith_op | logic_op }
 
 // Unary prefix (e.g., -x or !x)
 neg = { "-" }

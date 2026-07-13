@@ -15,7 +15,8 @@ pub enum Expr {
     Float(f32),
     Name(String),
     Call(CallExpr),
-    Bin(BinExpr),
+    Arith(ArithExpr),
+    Logic(LogicExpr),
     
     Neg(Box<Expr>),
     Factorial(Box<Expr>),
@@ -31,20 +32,30 @@ pub struct CallExpr {
 }
 
 #[derive(Debug)]
-pub struct BinExpr {
-    pub op: BinOp,
+pub struct ArithExpr {
+    pub op: ArithOp,
     pub left: Box<Expr>,
     pub right: Box<Expr>,
 }
 
 #[derive(Debug)]
-pub enum BinOp {
+pub enum ArithOp {
     Add,
     Sub,
     Mul,
     Div,
     Pow,
+}
 
+#[derive(Debug)]
+pub struct LogicExpr {
+    pub op: LogicOp,
+    pub left: Box<Expr>,
+    pub right: Box<Expr>,
+}
+
+#[derive(Debug)]
+pub enum LogicOp {
     Eq,
     Ne,
     Lt,
@@ -163,11 +174,11 @@ fn parse_expr(pairs: pest::iterators::Pairs<Rule>) -> Expr {
         })
         .map_infix(|left, op, right| {
             let op = match op.as_rule() {
-                Rule::add => BinOp::Add,
-                Rule::sub => BinOp::Sub,
-                Rule::mul => BinOp::Mul,
-                Rule::div => BinOp::Div,
-                Rule::pow => BinOp::Pow,
+                Rule::add => ArithOp::Add,
+                Rule::sub => ArithOp::Sub,
+                Rule::mul => ArithOp::Mul,
+                Rule::div => ArithOp::Div,
+                Rule::pow => ArithOp::Pow,
 
                 Rule::eq  => {
                     // haxy (maybe I'll impl references...)
