@@ -1,14 +1,15 @@
 use std::collections::HashMap;
 
 use eframe::egui::{self, Color32};
-use log::error;
 use lucide_icons::Icon;
 use rand::seq::IndexedRandom;
 
 use crate::lang::*;
 
 struct GameState {
+    // maybe should be coupled more
     vars: HashMap<String, f32>,
+    var_defs: HashMap<String, usize>, // index to CodeLine
 }
 
 struct CodeLine {
@@ -61,7 +62,7 @@ impl Default for MyApp {
             focus_request: Some(0),
             code_panel_open: true,
 
-            state: GameState { vars: HashMap::new() },
+            state: GameState { vars: HashMap::new(), var_defs: HashMap::new() },
 
             pan: egui::vec2(0.0, 0.0),
             zoom: 1.0,
@@ -100,6 +101,7 @@ impl MyApp {
             Expr::Neg(e) => self.evalf(e).map(|f: f32| -f),
             Expr::Factorial(_) => None,
             Expr::Circle(_) => None,
+            Expr::Define(_) => None,
             Expr::Assign(_) => None,
         }
     }
@@ -115,6 +117,10 @@ impl MyApp {
                 let y = self.evalf(y)?;
                 let r = self.evalf(r)?;
                 Some(Eval::Circle(CircleEval { x, y, r }))
+            }
+            Expr::Define(DefineExpr { name, val }) => {
+                let val = self.evalf(val)?;
+                Some(Eval::Define(DefineEval { name: name.clone(), val }))
             }
             Expr::Assign(AssignExpr { name, val }) => {
                 let val = self.evalf(val)?;
@@ -139,14 +145,31 @@ impl MyApp {
         }
 
         let eval = self.eval(expr);
-        if let Some(Eval::Assign(assign)) = eval.as_ref() {
-            self.assign(assign.clone());
+        if let Some(Eval::Define(DefineEval { name, val })) = eval.as_ref() {
+            // self.assign(assign.clone());
+            if let Some(&def) = self.state.var_defs.get(name) && def != self.lines[index].id {
+                // its defined elsewhere
+                self.lines[index].eval = None;
+            } else {   
+                self.state.vars.insert(name.clone(), *val);
+                // todo name removing
+                self.state.var_defs.insert(name.clone(), self.lines[index].id);
+                for i in 0..self.lines.len() {
+                    if i == index {
+                        continue;
+                    }
+                    // no overflow bc definition is unique
+                    self.code_eval(i);
+                }
+            }
         }
         self.lines[index].eval = eval;
     }
 
     fn assign(&mut self, AssignEval { name, val }: AssignEval) {
         self.state.vars.insert(name, val);
+        // todo: have it edit definition
+        // rn it does absolutely nothing bc it doesnt edit definition, so defintion just reupdates state
         for i in 0..self.lines.len() {
             self.code_eval(i);
         }
@@ -192,13 +215,25 @@ impl eframe::App for MyApp {
                     None => {},
                     Some(CodeAction::Insert(index)) => self.insert(index),
                     Some(CodeAction::Remove(index)) => {
-                        self.lines.remove(index);
+                        let line = self.lines.remove(index);
+
+                        // todo add proper remove procedure
+                        let mut rem_name = None;
+                        for (name, &id) in &self.state.var_defs {
+                            if line.id == id {
+                                rem_name = Some(name.clone());
+                            }
+                        }
+                        if let Some(name) = rem_name {
+                            self.state.var_defs.remove(&name);
+                        }
+
                         self.focus_request = Some(self.lines[index - 1].id);
                     },
                     Some(CodeAction::Focus(index)) => self.focus_request = Some(self.lines[index].id),
                     Some(CodeAction::Eval(index)) => {
                         self.code_eval(index);
-                        self.focus_request = Some(self.lines[index].id);
+                        // self.focus_request = Some(self.lines[index].id);
                     },
                     Some(CodeAction::Run(index)) => {
                         let Some(Eval::Assign(assign)) = &self.lines[index].eval else {

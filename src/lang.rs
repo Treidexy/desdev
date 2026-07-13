@@ -5,6 +5,7 @@ use pest_derive::Parser;
 pub enum Eval {
     Float(f32),
     Circle(CircleEval),
+    Define(DefineEval),
     Assign(AssignEval),
 }
 
@@ -19,6 +20,7 @@ pub enum Expr {
     Neg(Box<Expr>),
     Factorial(Box<Expr>),
     Circle(CircleExpr),
+    Define(DefineExpr),
     Assign(AssignExpr),
 }
 
@@ -66,6 +68,18 @@ pub struct CircleEval {
     pub x: f32,
     pub y: f32,
     pub r: f32,
+}
+
+#[derive(Debug)]
+pub struct DefineExpr {
+    pub name: String,
+    pub val: Box<Expr>,
+}
+
+#[derive(Debug, Clone)]
+pub struct DefineEval {
+    pub name: String,
+    pub val: f32,
 }
 
 #[derive(Debug)]
@@ -155,7 +169,14 @@ fn parse_expr(pairs: pest::iterators::Pairs<Rule>) -> Expr {
                 Rule::div => BinOp::Div,
                 Rule::pow => BinOp::Pow,
 
-                Rule::eq  => BinOp::Eq,
+                Rule::eq  => {
+                    // haxy (maybe I'll impl references...)
+                    if let Expr::Name(name) = left {
+                        return Expr::Define(DefineExpr { name, val: Box::new(right), })
+                    }
+
+                    BinOp::Eq
+                },
                 Rule::ne => BinOp::Ne,
                 Rule::lt  => BinOp::Lt,
                 Rule::le => BinOp::Le,
