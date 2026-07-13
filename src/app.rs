@@ -24,7 +24,6 @@ enum CodeAction {
     Insert(usize),
     Remove(usize),
     Focus(usize),
-    Eval(usize),
     Run(usize),
 }
 
@@ -234,10 +233,6 @@ impl eframe::App for MyApp {
                         self.focus_request = Some(self.lines[index - 1].id);
                     },
                     Some(CodeAction::Focus(index)) => self.focus_request = Some(self.lines[index].id),
-                    Some(CodeAction::Eval(index)) => {
-                        self.code_eval(index);
-                        // self.focus_request = Some(self.lines[index].id);
-                    },
                     Some(CodeAction::Run(index)) => {
                         let Some(Eval::Assign(assign)) = &self.lines[index].eval else {
                             panic!("this shouldnt be possible");
@@ -351,17 +346,13 @@ impl MyApp {
     fn show_code_line(&mut self, index: usize, ui: &mut egui::Ui) -> Option<CodeAction> {
         let line = &mut self.lines[index];
         let was_empty = line.text.is_empty();
-        enum Response2 {
+        enum Response {
             Egui(egui::Response),
             Run,
-            Eval,
+            ParseEval,
         }
         let response = ui
             .push_id(line.id, |ui| {
-                enum Response1 {
-                    Egui(egui::Response),
-                    Run,
-                }
                 let response = ui.horizontal(|ui| {
                     match line.eval {
                         Some(Eval::Circle(_)) => {
@@ -369,21 +360,29 @@ impl MyApp {
                         },
                         Some(Eval::Assign(_)) => {
                             if ui.button("->").clicked() {
-                                return Response1::Run;
+                                return Response::Run;
                             }
                         },
                         _ => {},
                     };
                     let response = ui.text_edit_singleline(&mut line.text);
-                    Response1::Egui(response)
+                    Response::Egui(response)
                 }).inner;
                 let response = match response {
-                    Response1::Egui(response) => response,
-                    Response1::Run => return Response2::Run,
+                    Response::Egui(response) => response,
+                    Response::Run => return Response::Run,
+                    Response::ParseEval => return Response::ParseEval,
                 };
-                
                 if response.changed() {
-                    line.expr = parse(&line.text).ok();
+                    return Response::ParseEval;
+                }
+
+                if let Some(Eval::Define(DefineEval { name, val })) = &line.eval {
+                    let mut val = *val;
+                    if ui.add(egui::Slider::new(&mut val, -10.0..=10.0)).changed() {
+                        line.text = format!("{name} = {val}");
+                        return Response::ParseEval;
+                    }
                 }
 
                 if let Some(expr) = &line.expr {
@@ -391,16 +390,20 @@ impl MyApp {
                 }        
                 if let Some(eval) = &line.eval {
                     if ui.button(format!("{:?}", eval)).clicked() {
-                        return Response2::Eval;
+                        return Response::ParseEval;
                     }
                 }
-                Response2::Egui(response)
+                Response::Egui(response)
             })
             .inner;
         let response = match response {
-            Response2::Egui(response) => response,
-            Response2::Run => return Some(CodeAction::Run(index)),
-            Response2::Eval => return Some(CodeAction::Eval(index)),
+            Response::Egui(response) => response,
+            Response::Run => return Some(CodeAction::Run(index)),
+            Response::ParseEval => {
+                line.expr = parse(&line.text).ok();
+                self.code_eval(index);
+                return None;
+            },
         };
         
         if let Some(focus_request) = self.focus_request && line.id == focus_request {
@@ -418,9 +421,6 @@ impl MyApp {
         }
         if response.has_focus() && index < self.lines.len() - 1 && ui.input(|i| i.key_pressed(egui::Key::ArrowDown)) {
             return Some(CodeAction::Focus(index + 1));
-        }
-        if response.changed() {
-            return Some(CodeAction::Eval(index));
         }
 
         return None;
