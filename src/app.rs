@@ -6,10 +6,13 @@ use rand::seq::IndexedRandom;
 
 use crate::lang::*;
 
+struct VarState {
+    val: f32,
+    def: usize, // line index of definition
+}
+
 struct GameState {
-    // maybe should be coupled more
-    vars: HashMap<String, f32>,
-    var_defs: HashMap<String, usize>, // index to CodeLine
+    vars: HashMap<String, VarState>,
 }
 
 struct CodeLine {
@@ -61,7 +64,7 @@ impl Default for MyApp {
             focus_request: Some(0),
             code_panel_open: true,
 
-            state: GameState { vars: HashMap::new(), var_defs: HashMap::new() },
+            state: GameState { vars: HashMap::new(), },
 
             pan: egui::vec2(0.0, 0.0),
             zoom: 1.0,
@@ -81,7 +84,7 @@ impl MyApp {
         match expr {
             Expr::Bad => None,
             &Expr::Float(f) => Some(f),
-            Expr::Name(name) => self.state.vars.get(name).copied(),
+            Expr::Name(name) => self.state.vars.get(name).map(|v| v.val),
             Expr::Call(_) => None,
             Expr::Bin(BinExpr { op, left, right }) => match op {
                 BinOp::Add => Some(self.evalf(left)? + self.evalf(right)?),
@@ -136,7 +139,7 @@ impl MyApp {
 
         match expr {
             Expr::Name(name) => {
-                let eval = self.state.vars.get(name).map(|&v| Eval::Float(v));
+                let eval = self.state.vars.get(name).map(|var| Eval::Float(var.val));
                 self.lines[index].eval = eval;
                 return;
             },
@@ -146,13 +149,15 @@ impl MyApp {
         let eval = self.eval(expr);
         if let Some(Eval::Define(DefineEval { name, val })) = eval.as_ref() {
             // self.assign(assign.clone());
-            if let Some(&def) = self.state.var_defs.get(name) && def != self.lines[index].id {
+            if let Some(var) = self.state.vars.get(name) && var.def != self.lines[index].id {
                 // its defined elsewhere
                 self.lines[index].eval = None;
             } else {   
-                self.state.vars.insert(name.clone(), *val);
-                // todo name removing
-                self.state.var_defs.insert(name.clone(), self.lines[index].id);
+                let var = VarState {
+                    val: *val,
+                    def: self.lines[index].id,
+                };
+                self.state.vars.insert(name.clone(), var);
                 for i in 0..self.lines.len() {
                     if i == index {
                         continue;
@@ -166,21 +171,22 @@ impl MyApp {
     }
 
     fn assign(&mut self, AssignEval { name, val }: AssignEval) {
-        // todo not it be lazy
-        let Some(&id) = self.state.var_defs.get(&name) else {
-            todo!()
+        let (index, line) = if let Some(var) = self.state.vars.get(&name) {
+            self.lines.iter_mut().enumerate().filter(|(_, line)| line.id == var.def).next().unwrap()
+        } else {
+            let index = self.lines.len();
+            self.insert(index - 1);
+            (index, &mut self.lines[index])
         };
-
-        let (index, line) = self.lines.iter_mut().enumerate().filter(|(_, line)| line.id == id).next().unwrap();
         line.text = format!("{name} = {val}");
         line.expr = parse(&line.text).ok();
         self.code_eval(index);
     }
 
-    fn insert(&mut self, index: usize) {
+    fn insert(&mut self, after_index: usize) {
         self.last_id += 1;
         self.lines.insert(
-            index + 1,
+            after_index + 1,
             CodeLine {
                 id: self.last_id,
                 text: String::new(),
@@ -196,13 +202,12 @@ impl MyApp {
         let line = self.lines.remove(index);
         
         let mut rem_name = None;
-        for (name, &id) in &self.state.var_defs {
-            if line.id == id {
+        for (name, &VarState { val: _, def }) in &self.state.vars {
+            if line.id == def {
                 rem_name = Some(name.clone());
             }
         }
         if let Some(name) = rem_name {
-            self.state.var_defs.remove(&name);
             self.state.vars.remove(&name);
         }
 
