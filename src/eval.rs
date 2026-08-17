@@ -38,8 +38,9 @@ pub struct FunctionEval {
     pub params: HashSet<String>,
 }
 
-pub trait Args : Fn(&String) -> Option<Eval> {}
-impl<T: Fn(&String) -> Option<Eval>> Args for T {}
+pub trait Args {
+    fn get(&self, name: &String) -> Option<Eval>;
+}
 
 fn binevalf(op: BinOp, left: f32, right: f32) -> f32 {
     match op {
@@ -61,21 +62,21 @@ pub fn eval_slate(SlateExpr { inner, args: args_expr }: &SlateExpr, big_args: &d
         small_args.insert(name, eval(val, big_args)?);
     }
 
-    let small_args = |name| small_args.get(name).cloned();
-    let args = |name| {
-        if let Some(val) = small_args(name) {
-            return Some(val);
+    struct StitchArgs<'a, A: Args + ?Sized>(HashMap<&'a String, Eval>, &'a A);
+    impl<'a, A: Args + ?Sized> Args for StitchArgs<'a, A> {
+        fn get(&self, name: &String) -> Option<Eval> {
+            self.0.get(name).cloned().or_else(|| {
+                let val = self.1.get(name)?;
+                if let Eval::Function(FunctionEval { inner, .. }) = val {
+                    eval(&inner, self).ok()
+                } else {
+                    Some(val)
+                }
+            })
         }
-        
-        let eval_result = big_args(name)?;
-        if let Eval::Function(FunctionEval { inner, params }) = eval_result {
-            eval(&inner, &args).ok()
-        } else {
-            Some(eval_result)
-        }
-    };
+    }
 
-    eval(inner, &args)
+    eval(inner, &StitchArgs(small_args, big_args))
 }
 
 pub fn eval(expr: &Expr, args: &dyn Args) -> Result<Eval, Todo> {
@@ -114,9 +115,9 @@ pub fn eval(expr: &Expr, args: &dyn Args) -> Result<Eval, Todo> {
             }),
             _ => return Err(Todo),
         },
-        Expr::Factorial(_) => return Err(Todo),
+        Expr::Factorial(..) => return Err(Todo),
         Expr::Name(name) =>
-            if let Some(val) = args(name) {
+            if let Some(val) = args.get(name) {
                 val
             } else {
                 Eval::Function(FunctionEval {
