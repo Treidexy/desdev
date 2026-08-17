@@ -1,15 +1,15 @@
-use std::{collections::{HashMap, HashSet}, intrinsics::unreachable};
+use std::collections::{HashMap, HashSet};
 
-use crate::parse::{BinExpr, BinOp, Expr};
+use crate::parse::*;
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Eval {
     Float(f32),
     Circle(CircleEval),
     Define(DefineEval),
     Assign(AssignEval),
-    Functio(FunctionEval),
+    Function(FunctionEval),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -32,9 +32,9 @@ pub struct AssignEval {
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FunctionEval {
-    pub inner: Expr,
+    pub inner: Expr, // assumed to be simplified?
     pub params: HashSet<String>,
 }
 
@@ -56,12 +56,13 @@ fn binevalf(op: BinOp, left: f32, right: f32) -> f32 {
 }
 
 // should expr be own vez ref?
-fn evalf(expr: &Expr, ctx: &HashMap<String, f32>) -> Result<f32, FunctionEval> {
+fn evalf(expr: &Expr, args: &HashMap<String, Eval>) -> Result<f32, FunctionEval> {
     match expr {
-        Expr::Bad => unreachable!(),
+        Expr::Bad | Expr::Circle(_) | Expr::Define(_) | Expr::Assign(_) => unreachable!(),
         &Expr::Float(f) => Ok(f),
-        Expr::Name(name) => if let Some(&val) = ctx.get(name) {
-            Ok(val)
+        Expr::Name(name) => if let Some(val) = args.get(name) {
+            let Eval::Float(val) = val else { unreachable!() };
+            Ok(*val)
         } else {
             Err(FunctionEval {
                 inner: Expr::Name(name.clone()),
@@ -70,53 +71,68 @@ fn evalf(expr: &Expr, ctx: &HashMap<String, f32>) -> Result<f32, FunctionEval> {
         },
         Expr::Call(_) => todo!(),
         Expr::Bin(BinExpr { op, left, right }) => {
-            let left = evalf(left, ctx);
-            let right = evalf(right, ctx);
-            match (left, right) {
+            let left = evalf(left, args);
+            let right = evalf(right, args);
+            let (left, right, params) = match (left, right) {
                 (Ok(left), Ok(right)) => return Ok(binevalf(*op, left, right)),
-                (Ok(left), Err(right)) => todo!(),
-                (Err(left), Ok(right)) => todo!(),
-                (Err(left), Err(right)) => {
-                    FunctionEval {
-                        inner: Expr::Bin(BinExpr {
-                            op: *op,
-                            left: Box::new(left.inner),
-                            right: Box::new(right.inner),
-                        }),
-                        params: left.params.union(&right.params).collect::<_>(),
-                    };
-                },
+                (Ok(left), Err(right)) => (Expr::Float(left), right.inner, right.params),
+                (Err(left), Ok(right)) => (left.inner, Expr::Float(right), left.params),
+                (Err(left), Err(right)) => (left.inner, right.inner, left.params.union(&right.params).collect::<_>()),
             };
 
-            todo!();
+            Err(FunctionEval {
+                inner: Expr::Bin(BinExpr {
+                    op: *op,
+                    left: Box::new(left),
+                    right: Box::new(right),
+                }),
+                params,
+            })
         },
-        Expr::Neg(e) => self.evalf(e).map(|f: f32| -f),
-        Expr::Factorial(_) => None,
-        Expr::Circle(_) => None,
-        Expr::Define(_) => None,
-        Expr::Assign(_) => None,
+        Expr::Neg(e) => evalf(e, args).map(|f: f32| -f),
+        Expr::Factorial(_) => todo!(),
     }
 }
 
-fn eval(expr: &Expr) -> Option<Eval> {
+fn eval(expr: &Expr, args: &HashMap<String, Eval>) -> Eval {
     match expr {
-        Expr::Neg(_) | Expr::Float(_) | Expr::Factorial(_) | Expr::Bin(_) | Expr::Call(_) => self.evalf(expr).map(Eval::Float),
+        Expr::Neg(_) | Expr::Float(_) | Expr::Factorial(_) | Expr::Bin(_) | Expr::Call(_) => match evalf(expr, args) {
+            Ok(f) => Eval::Float(f),
+            Err(e) => Eval::Function(e),
+        },
+        Expr::Name(name) => if let Some(val) = args.get(name) {
+            val.clone()
+        } else {
+            Eval::Function(FunctionEval {
+                inner: Expr::Name(name.clone()),
+                params: HashSet::from([name.clone()]),
+            })
+        },
 
-        Expr::Bad => None,
-        Expr::Name(_) => None,
+        Expr::Bad => todo!(),
         Expr::Circle(CircleExpr { x, y, r }) => {
-            let x = self.evalf(x)?;
-            let y = self.evalf(y)?;
-            let r = self.evalf(r)?;
-            Some(Eval::Circle(CircleEval { x, y, r }))
+            let x = evalf(x, args);
+            let y = evalf(y, args);
+            let r = evalf(r, args);
+
+            match (x, y, r) {
+                (Ok(x), Ok(y), Ok(r)) => return Eval::Circle(CircleEval { x, y, r, }),
+                (Ok(_), Ok(_), Err(_)) => todo!(),
+                (Ok(_), Err(_), Ok(_)) => todo!(),
+                (Ok(_), Err(_), Err(_)) => todo!(),
+                (Err(_), Ok(_), Ok(_)) => todo!(),
+                (Err(_), Ok(_), Err(_)) => todo!(),
+                (Err(_), Err(_), Ok(_)) => todo!(),
+                (Err(_), Err(_), Err(_)) => todo!(),
+            }
         }
         Expr::Define(DefineExpr { name, val }) => {
-            let val = self.evalf(val)?;
-            Some(Eval::Define(DefineEval { name: name.clone(), val }))
+            let val = eval(val, args);
+            Eval::Define(DefineEval { name: name.clone(), val })
         }
         Expr::Assign(AssignExpr { name, val }) => {
-            let val = self.evalf(val)?;
-            Some(Eval::Assign(AssignEval { name: name.clone(), val }))
+            let val = eval(val, args);
+            Eval::Assign(AssignEval { name: name.clone(), val })
         }
     }
 }

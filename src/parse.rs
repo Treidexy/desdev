@@ -2,7 +2,7 @@ use pest::{Parser, pratt_parser::{Assoc, Op, PrattParser}};
 use pest_derive::Parser;
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Expr {
     Bad,
     Float(f32),
@@ -17,13 +17,13 @@ pub enum Expr {
     Assign(AssignExpr),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CallExpr {
     pub callee: Box<Expr>,
     pub args: Vec<Expr>, // todo: named args
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct BinExpr {
     pub op: BinOp,
     pub left: Box<Expr>,
@@ -49,20 +49,20 @@ pub enum BinOp {
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CircleExpr {
     pub x: Box<Expr>,
     pub y: Box<Expr>,
     pub r: Box<Expr>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DefineExpr {
     pub name: String,
     pub val: Box<Expr>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AssignExpr {
     pub name: String,
     pub val: Box<Expr>,
