@@ -55,45 +55,6 @@ fn binevalf(op: BinOp, left: f32, right: f32) -> f32 {
     }
 }
 
-// should expr be own vez ref?
-fn evalf(expr: &Expr, args: &HashMap<String, Eval>) -> Result<f32, FunctionEval> {
-    match expr {
-        Expr::Bad | Expr::Circle(_) | Expr::Define(_) | Expr::Assign(_) => unreachable!(),
-        &Expr::Float(f) => Ok(f),
-        Expr::Name(name) => if let Some(val) = args.get(name) {
-            let Eval::Float(val) = val else { unreachable!() };
-            Ok(*val)
-        } else {
-            Err(FunctionEval {
-                inner: Expr::Name(name.clone()),
-                params: HashSet::from([name.clone()]),
-            })
-        },
-        Expr::Call(_) => todo!(),
-        Expr::Bin(BinExpr { op, left, right }) => {
-            let left = evalf(left, args);
-            let right = evalf(right, args);
-            let (left, right, params) = match (left, right) {
-                (Ok(left), Ok(right)) => return Ok(binevalf(*op, left, right)),
-                (Ok(left), Err(right)) => (Expr::Float(left), right.inner, right.params),
-                (Err(left), Ok(right)) => (left.inner, Expr::Float(right), left.params),
-                (Err(left), Err(right)) => (left.inner, right.inner, left.params.union(&right.params).collect::<_>()),
-            };
-
-            Err(FunctionEval {
-                inner: Expr::Bin(BinExpr {
-                    op: *op,
-                    left: Box::new(left),
-                    right: Box::new(right),
-                }),
-                params,
-            })
-        },
-        Expr::Neg(e) => evalf(e, args).map(|f: f32| -f),
-        Expr::Factorial(_) => todo!(),
-    }
-}
-
 fn eval(expr: &Expr, args: &HashMap<String, Eval>) -> Eval {
     match expr {
         Expr::Neg(_) | Expr::Float(_) | Expr::Factorial(_) | Expr::Bin(_) | Expr::Call(_) => match evalf(expr, args) {
