@@ -65,18 +65,20 @@ impl Default for MyApp {
         let eval = app.lines[0]
             .expr
             .as_ref()
-            .and_then(|expr| eval(expr, &app).ok());
+            .and_then(|expr| eval(expr, &app.args()).ok());
         app.lines[0].eval = eval;
         app
     }
 }
 
-impl Args for MyApp {
-    fn get(&self, name: &String) -> Option<Eval> {
-        let &line_id = self.vars.get(name)?;
-        let def_eval = self.lines.iter().filter(|line| line.id == line_id).next().and_then(|line| line.eval.clone())?;
-        let Eval::Define(DefineEval { name: _, val }) = def_eval else { unreachable!() };
-        Some(*val)
+impl MyApp {
+    fn args(&self) -> impl Args {
+        |name| {
+            let &line_id = self.vars.get(name)?;
+            let def_eval = self.lines.iter().filter(|line| line.id == line_id).next().and_then(|line| line.eval.clone())?;
+            let Eval::Define(DefineEval { name: _, val }) = def_eval else { unreachable!() };
+            Some(*val)
+        }
     }
 }
 
@@ -88,7 +90,7 @@ impl MyApp {
             return;
         };
 
-        let eval = eval(expr, self);
+        let eval = eval(expr, &self.args());
         if let Ok(Eval::Define(DefineEval { name, val: _ })) = eval.as_ref() {
             // self.assign(assign.clone());
             if let Some(&line_id) = self.vars.get(name) && line_id != line.id {
