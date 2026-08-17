@@ -9,7 +9,6 @@ pub enum Eval {
     Circle(CircleEval),
     Define(DefineEval),
     Assign(AssignEval),
-    Function(FunctionEval),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -22,24 +21,24 @@ pub struct CircleEval {
 #[derive(Debug, Clone)]
 pub struct DefineEval {
     pub name: String,
-    pub val: Box<Eval>,
+    pub val: Box<Function>,
 }
 
 #[derive(Debug, Clone)]
 pub struct AssignEval {
     pub name: String,
-    pub val: Box<Eval>,
+    pub val: Box<Function>,
 }
 
 
 #[derive(Debug, Clone)]
-pub struct FunctionEval {
+pub struct Function {
     pub inner: Expr, // assumed to be simplified?
     pub params: HashSet<String>,
 }
 
 pub trait Args {
-    fn get(&self, name: &String) -> Option<Eval>;
+    fn get(&self, name: &String) -> Option<Function>;
 }
 
 fn binevalf(op: BinOp, left: f32, right: f32) -> f32 {
@@ -56,58 +55,61 @@ fn binevalf(op: BinOp, left: f32, right: f32) -> f32 {
 
 pub struct Todo;
 
-pub fn eval<A: Args>(expr: &Expr, args: &A) -> Result<Eval, Todo> {
-    let eval = match expr {
+pub fn tighten(expr: &Expr) -> Result<Function, Todo> {
+    let function: Function = match expr {
         &Expr::Float(f) => Eval::Float(f),
         Expr::Call(_) => return Err(Todo),
         Expr::Bin(BinExpr { op, left, right }) => {
-            let left = eval(left, args)?;
-            let right = eval(right, args)?;
-            let (left, right, params) = match (left, right) {
-                (Eval::Float(left), Eval::Float(right)) => return Ok(Eval::Float(binevalf(*op, left, right))),
-                (Eval::Float(left), Eval::Function(right)) => (Expr::Float(left), right.inner, right.params),
-                (Eval::Function(left), Eval::Float(right)) => (left.inner, Expr::Float(right), left.params),
-                (Eval::Function(left), Eval::Function(right)) => (
-                    left.inner,
-                    right.inner,
-                    left.params.into_iter().chain(right.params).collect(),
-                ),
-                _ => return Err(Todo),
-            };
-
-            Eval::Function(FunctionEval {
-                inner: Expr::Bin(BinExpr {
-                    op: *op,
-                    left: Box::new(left),
-                    right: Box::new(right),
-                }),
-                params,
-            })
+            let left = tighten(left)?;
+            let right = tighten(right)?;
+            if left.params.is_empty() && right.params.is_empty() {
+                let (Expr::Float(left), Expr::Float(right)) = (left.inner, right.inner) else { return Err(Todo); };
+                Function {
+                    inner: Expr::Float(binevalf(*op, left, right)),
+                    params: HashSet::new()
+                }
+            } else {
+                Function {
+                    inner: Expr::Bin(BinExpr {
+                        op: *op,
+                        left: Box::new(left),
+                        right: Box::new(right),
+                    }),
+                    params: left.params.into_iter().chain(right.params).collect(),
+                }
+            }
         },
-        Expr::Neg(e) => match eval(e, args)? {
-            Eval::Float(f) => Eval::Float(-f),
-            Eval::Function(f) => Eval::Function(FunctionEval {
-                inner: Expr::Neg(Box::new(f.inner)),
-                params: f.params,
-            }),
-            _ => return Err(Todo),
+        Expr::Neg(e) => {
+            let e = match tighten(e)?;
+            if e.params.is_empty() {
+                let Expr::Float(e) = e.inner else { return Err(Todo); };
+                Function {
+                    inner: Expr::Float(-e),
+                    params: HashSet::new(),
+                }
+            } else {
+                Function {
+                    inner: Expr::Neg(e),
+                    params: e.params,
+                }
+            }
         },
         Expr::Factorial(_) => return Err(Todo),
         Expr::Name(name) =>
             if let Some(val) = args.get(name) {
                 val
             } else {
-                Eval::Function(FunctionEval {
+                Function {
                     inner: Expr::Name(name.clone()),
                     params: HashSet::from([name.clone()]),
-                })
+                }
             },
 
         Expr::Bad => return Err(Todo),
         Expr::Circle(CircleExpr { x, y, r }) => {
-            let x = eval(x, args)?;
-            let y = eval(y, args)?;
-            let r = eval(r, args)?;
+            let x = tighten(x, args)?;
+            let y = tighten(y, args)?;
+            let r = tighten(r, args)?;
 
             match (x, y, r) {
                 (Eval::Float(x), Eval::Float(y), Eval::Float(r)) => Eval::Circle(CircleEval { x, y, r, }),
@@ -115,14 +117,14 @@ pub fn eval<A: Args>(expr: &Expr, args: &A) -> Result<Eval, Todo> {
             }
         }
         Expr::Define(DefineExpr { name, val }) => {
-            let val = eval(val, args)?;
+            let val = tighten(val, args)?;
             Eval::Define(DefineEval {
                 name: name.clone(),
                 val: Box::new(val)
             })
         }
         Expr::Assign(AssignExpr { name, val }) => {
-            let val = eval(val, args)?;
+            let val = tighten(val, args)?;
             Eval::Assign(AssignEval {
                 name: name.clone(),
                 val: Box::new(val)
@@ -130,9 +132,9 @@ pub fn eval<A: Args>(expr: &Expr, args: &A) -> Result<Eval, Todo> {
         }
     };
 
-    Ok(eval)
+    Ok(function)
 }
 
-pub fn stab<A: Args>(function: FunctionEval, args: &A) -> Result<Eval, Todo> {
-    eval(&function.inner, args)
+pub fn eval<A: Args>(function: Function, args: &A) -> Result<Eval, Todo> {
+    todo!()
 }
