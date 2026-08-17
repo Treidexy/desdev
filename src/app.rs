@@ -6,15 +6,6 @@ use rand::seq::IndexedRandom;
 
 use crate::{eval::*, parse::*};
 
-struct VarState {
-    val: f32,
-    def: usize, // line index of definition
-}
-
-struct GameState {
-    vars: HashMap<String, VarState>,
-}
-
 struct CodeLine {
     id: usize,
     text: String,
@@ -36,7 +27,8 @@ struct MyApp {
     focus_request: Option<usize>,
     code_panel_open: bool,
 
-    state: GameState,
+    // todo add proper gamestate
+    vars: HashMap<String, usize>,
 
     pan: egui::Vec2,
     zoom: f32,
@@ -64,7 +56,7 @@ impl Default for MyApp {
             focus_request: Some(0),
             code_panel_open: true,
 
-            state: GameState { vars: HashMap::new(), },
+            vars: HashMap::new(),
 
             pan: egui::vec2(0.0, 0.0),
             zoom: 1.0,
@@ -73,114 +65,53 @@ impl Default for MyApp {
         let eval = app.lines[0]
             .expr
             .as_ref()
-            .and_then(|expr| app.eval(expr));
+            .and_then(|expr| eval(expr, &app).ok());
         app.lines[0].eval = eval;
         app
     }
 }
 
+impl Args for MyApp {
+    fn get(&self, name: &String) -> Option<Eval> {
+        let &line_id = self.vars.get(name)?;
+        let def_eval = self.lines.iter().filter(|line| line.id == line_id).next().and_then(|line| line.eval.clone())?;
+        let Eval::Define(DefineEval { name: _, val }) = def_eval else { unreachable!() };
+        Some(*val)
+    }
+}
+
 impl MyApp {
-    fn evalf(&self, expr: &Expr) -> Option<f32> {
-        match expr {
-            Expr::Bad => None,
-            &Expr::Float(f) => Some(f),
-            Expr::Name(name) => self.state.vars.get(name).map(|v| v.val),
-            Expr::Call(_) => None,
-            Expr::Bin(BinExpr { op, left, right }) => match op {
-                BinOp::Add => Some(self.evalf(left)? + self.evalf(right)?),
-                BinOp::Sub => Some(self.evalf(left)? - self.evalf(right)?),
-                BinOp::Mul => Some(self.evalf(left)? * self.evalf(right)?),
-                BinOp::Div => Some(self.evalf(left)? / self.evalf(right)?),
-                BinOp::Pow => Some(self.evalf(left)?.powf(self.evalf(right)?)),
-                BinOp::Eq => None,
-                BinOp::Ne => None,
-                BinOp::Lt => None,
-                BinOp::Le => None,
-                BinOp::Gt => None,
-                BinOp::Ge => None,
-                BinOp::Arrow => None,
-            },
-            Expr::Neg(e) => self.evalf(e).map(|f: f32| -f),
-            Expr::Factorial(_) => None,
-            Expr::Circle(_) => None,
-            Expr::Define(_) => None,
-            Expr::Assign(_) => None,
-        }
-    }
-
-    fn eval(&self, expr: &Expr) -> Option<Eval> {
-        match expr {
-            Expr::Neg(_) | Expr::Float(_) | Expr::Factorial(_) | Expr::Bin(_) | Expr::Call(_) => self.evalf(expr).map(Eval::Float),
-
-            Expr::Bad => None,
-            Expr::Name(_) => None,
-            Expr::Circle(CircleExpr { x, y, r }) => {
-                let x = self.evalf(x)?;
-                let y = self.evalf(y)?;
-                let r = self.evalf(r)?;
-                Some(Eval::Circle(CircleEval { x, y, r }))
-            }
-            Expr::Define(DefineExpr { name, val }) => {
-                let val = self.evalf(val)?;
-                Some(Eval::Define(DefineEval { name: name.clone(), val }))
-            }
-            Expr::Assign(AssignExpr { name, val }) => {
-                let val = self.evalf(val)?;
-                Some(Eval::Assign(AssignEval { name: name.clone(), val }))
-            }
-        }
-    }
-
     fn code_eval(&mut self, index: usize) {
-        let Some(expr) = self.lines[index].expr.as_ref() else {
+        let line = &self.lines[index];
+        let Some(expr) = line.expr.as_ref() else {
             self.lines[index].eval = None;
             return;
         };
 
-        match expr {
-            Expr::Name(name) => {
-                let eval = self.state.vars.get(name).map(|var| Eval::Float(var.val));
-                self.lines[index].eval = eval;
-                return;
-            },
-            _ => {},
-        }
-
-        let eval = self.eval(expr);
-        if let Some(Eval::Define(DefineEval { name, val })) = eval.as_ref() {
+        let eval = eval(expr, self);
+        if let Ok(Eval::Define(DefineEval { name, val: _ })) = eval.as_ref() {
             // self.assign(assign.clone());
-            if let Some(var) = self.state.vars.get(name) && var.def != self.lines[index].id {
+            if let Some(&line_id) = self.vars.get(name) && line_id != line.id {
                 // its defined elsewhere
                 self.lines[index].eval = None;
+                println!("alr defined elsewhere");
             } else {   
-                let var = VarState {
-                    val: *val,
-                    def: self.lines[index].id,
-                };
-                self.state.vars.insert(name.clone(), var);
-                // todo: dependent var exprs
-                // for i in 0..self.lines.len() {
-                //     if i == index {
-                //         continue;
-                //     }
-                //     // no overflow bc definition is unique
-                //     self.code_eval(i);
-                // }
+                self.vars.insert(name.clone(), line.id);
             }
         }
-        self.lines[index].eval = eval;
+        self.lines[index].eval = eval.ok();
     }
 
     fn assign(&mut self, AssignEval { name, val }: AssignEval) {
-        let (index, line) = if let Some(var) = self.state.vars.get(&name) {
-            self.lines.iter_mut().enumerate().filter(|(_, line)| line.id == var.def).next().unwrap()
+        let index = if let Some(&line_id) = self.vars.get(&name) {
+            self.lines.iter().enumerate().filter(|(_, line)| line.id == line_id).next().unwrap().0
         } else {
             let index = self.lines.len();
             self.insert(index - 1);
-            (index, &mut self.lines[index])
+            index
         };
-        line.text = format!("{name} = {val}");
-        line.expr = parse(&line.text).ok();
+        self.lines[index].text = format!("{name} = {val:?}");
+        self.lines[index].expr = parse(&self.lines[index].text).ok();
         self.code_eval(index);
     }
 
@@ -202,16 +133,11 @@ impl MyApp {
     fn remove(&mut self, index: usize) {
         let line = self.lines.remove(index);
         
-        let mut rem_name = None;
-        for (name, &VarState { val: _, def }) in &self.state.vars {
-            if line.id == def {
-                rem_name = Some(name.clone());
-            }
+        // todo myb make more robust
+        if let Some(Eval::Define(DefineEval { name, val: _ })) = line.eval {
+            self.vars.remove(&name);
         }
-        if let Some(name) = rem_name {
-            self.state.vars.remove(&name);
-        }
-
+        
         self.focus_request = Some(self.lines[index - 1].id);
     }
 }
@@ -389,8 +315,8 @@ impl MyApp {
                     return Response::ParseEval;
                 }
 
-                if let Some(Eval::Define(DefineEval { name, val })) = &line.eval {
-                    let mut val = *val;
+                if let Some(Eval::Define(DefineEval { name, val })) = &line.eval && let Eval::Float(val) = **val {
+                    let mut val = val;
                     if ui.add(egui::Slider::new(&mut val, -10.0..=10.0)).changed() {
                         line.text = format!("{name} = {val}");
                         return Response::ParseEval;
