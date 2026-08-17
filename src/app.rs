@@ -65,7 +65,7 @@ impl Default for MyApp {
         let eval = app.lines[0]
             .expr
             .as_ref()
-            .and_then(|expr| tighten(expr, &app).ok());
+            .and_then(|expr| eval(expr, &app).ok());
         app.lines[0].eval = eval;
         app
     }
@@ -88,7 +88,7 @@ impl MyApp {
             return;
         };
 
-        let eval = tighten(expr, self);
+        let eval = eval(expr, self);
         if let Ok(Eval::Define(DefineEval { name, val: _ })) = eval.as_ref() {
             // self.assign(assign.clone());
             if let Some(&line_id) = self.vars.get(name) && line_id != line.id {
