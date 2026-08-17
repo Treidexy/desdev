@@ -55,7 +55,7 @@ fn binevalf(op: BinOp, left: f32, right: f32) -> f32 {
 
 pub struct Todo;
 
-pub fn eval_slate(SlateExpr { inner, args: args_expr }: &SlateExpr, big_args: &impl Args) -> Result<Eval, Todo> {
+pub fn eval_slate(SlateExpr { inner, args: args_expr }: &SlateExpr, big_args: &dyn Args) -> Result<Eval, Todo> {
     let mut args = HashMap::new();
     for (name, val) in args_expr {
         args.insert(name, eval(val, big_args)?);
@@ -64,7 +64,7 @@ pub fn eval_slate(SlateExpr { inner, args: args_expr }: &SlateExpr, big_args: &i
     eval(inner, &|name| args.get(name).cloned().or(big_args(name)))
 }
 
-pub fn eval(expr: &Expr, args: &impl Args) -> Result<Eval, Todo> {
+pub fn eval(expr: &Expr, args: &dyn Args) -> Result<Eval, Todo> {
     let eval = match expr {
         &Expr::Float(f) => Eval::Float(f),
         Expr::Slate(slate) => eval_slate(slate, args)?,
