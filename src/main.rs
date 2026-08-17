@@ -1,7 +1,8 @@
 use log::{debug, error, info, warn};
 
 mod app;
-mod lang;
+mod parse;
+mod eval;
 
 fn main() -> eframe::Result {
     env_logger::init();

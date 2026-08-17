@@ -1,13 +1,6 @@
 use pest::{Parser, pratt_parser::{Assoc, Op, PrattParser}};
 use pest_derive::Parser;
 
-#[derive(Debug)]
-pub enum Eval {
-    Float(f32),
-    Circle(CircleEval),
-    Define(DefineEval),
-    Assign(AssignEval),
-}
 
 #[derive(Debug)]
 pub enum Expr {
@@ -37,7 +30,7 @@ pub struct BinExpr {
     pub right: Box<Expr>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum BinOp {
     Add,
     Sub,
@@ -63,23 +56,10 @@ pub struct CircleExpr {
     pub r: Box<Expr>,
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct CircleEval {
-    pub x: f32,
-    pub y: f32,
-    pub r: f32,
-}
-
 #[derive(Debug)]
 pub struct DefineExpr {
     pub name: String,
     pub val: Box<Expr>,
-}
-
-#[derive(Debug, Clone)]
-pub struct DefineEval {
-    pub name: String,
-    pub val: f32,
 }
 
 #[derive(Debug)]
@@ -87,13 +67,6 @@ pub struct AssignExpr {
     pub name: String,
     pub val: Box<Expr>,
 }
-
-#[derive(Debug, Clone)]
-pub struct AssignEval {
-    pub name: String,
-    pub val: f32,
-}
-
 
 #[derive(Parser)]
 #[grammar = "grammar.pest"]
@@ -106,13 +79,13 @@ lazy_static::lazy_static! {
         // Each `.op()` call increases the precedence.
         // Comparators have the lowest precedence, function calls have the highest.
         PrattParser::new()
-            .op(Op::infix(arrow, Assoc::Left))
             .op(Op::infix(eq, Assoc::Left)
                 | Op::infix(ne, Assoc::Left)
                 | Op::infix(lt, Assoc::Left)
                 | Op::infix(le, Assoc::Left)
                 | Op::infix(gt, Assoc::Left)
                 | Op::infix(ge, Assoc::Left))
+            .op(Op::infix(arrow, Assoc::Left))
             .op(Op::infix(add, Assoc::Left) | Op::infix(sub, Assoc::Left))
             .op(Op::infix(mul, Assoc::Left) | Op::infix(div, Assoc::Left))
             .op(Op::infix(pow, Assoc::Left))
@@ -173,6 +146,8 @@ fn parse_expr(pairs: pest::iterators::Pairs<Rule>) -> Expr {
                     // haxy (maybe I'll impl references...)
                     if let Expr::Name(name) = left {
                         return Expr::Define(DefineExpr { name, val: Box::new(right), })
+                    } else if let Expr::Call(call) = left {
+                        return Expr::Define(DefineExpr { name: format!("{:?}", call.callee), val: Box::new(right), })
                     }
 
                     BinOp::Eq

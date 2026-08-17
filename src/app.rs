@@ -4,7 +4,7 @@ use eframe::egui::{self, Color32};
 use lucide_icons::Icon;
 use rand::seq::IndexedRandom;
 
-use crate::lang::*;
+use crate::{eval::*, parse::*};
 
 struct VarState {
     val: f32,
@@ -158,13 +158,14 @@ impl MyApp {
                     def: self.lines[index].id,
                 };
                 self.state.vars.insert(name.clone(), var);
-                for i in 0..self.lines.len() {
-                    if i == index {
-                        continue;
-                    }
-                    // no overflow bc definition is unique
-                    self.code_eval(i);
-                }
+                // todo: dependent var exprs
+                // for i in 0..self.lines.len() {
+                //     if i == index {
+                //         continue;
+                //     }
+                //     // no overflow bc definition is unique
+                //     self.code_eval(i);
+                // }
             }
         }
         self.lines[index].eval = eval;
