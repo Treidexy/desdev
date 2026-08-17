@@ -132,3 +132,7 @@ pub fn eval<A: Args>(expr: &Expr, args: &A) -> Result<Eval, Todo> {
 
     Ok(eval)
 }
+
+pub fn stab<A: Args>(function: FunctionEval, args: &A) -> Result<Eval, Todo> {
+    eval(&function.inner, args)
+}
