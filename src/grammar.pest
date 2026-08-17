@@ -21,16 +21,15 @@ logic_op = _{ eq | ne | le | lt | ge | gt }
 
 arrow = { "->" }
 
-// Infix grouping
 infix = _{ arrow | arith_op | logic_op }
 
-// Unary prefix (e.g., -x or !x)
 neg = { "-" }
-prefix = _{ neg }
+slatom = { name ~ "=" ~ expr }
+slate = { "[" ~ (slatom ~ ("," ~ slatom)*) ~ "]" }
+prefix = _{ slate | neg }
 
-// Function calls act as a postfix operator applied to an name or expression
-call = { "(" ~ (expr ~ ("," ~ expr)*)? ~ ")" }
 factorial = { "!" }
+call = { "(" ~ (expr ~ ("," ~ expr)*) ~ ")" }
 postfix = _{ call | factorial }
 
 // Primaries are the base elements

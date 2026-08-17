@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use pest::{Parser, pratt_parser::{Assoc, Op, PrattParser}};
 use pest_derive::Parser;
 
@@ -7,7 +9,7 @@ pub enum Expr {
     Bad,
     Float(f32),
     Name(String),
-    Call(CallExpr),
+    Slate(SlateExpr),
     Bin(BinExpr),
     
     Neg(Box<Expr>),
@@ -18,9 +20,9 @@ pub enum Expr {
 }
 
 #[derive(Debug, Clone)]
-pub struct CallExpr {
-    pub callee: Box<Expr>,
-    pub args: Vec<Expr>, // todo: named args
+pub struct SlateExpr {
+    pub inner: Box<Expr>,
+    pub args: Vec<(String, Expr)>,
 }
 
 #[derive(Debug, Clone)]
@@ -76,8 +78,6 @@ lazy_static::lazy_static! {
     static ref PRATT_PARSER: PrattParser<Rule> = {
         use Rule::*;
         
-        // Each `.op()` call increases the precedence.
-        // Comparators have the lowest precedence, function calls have the highest.
         PrattParser::new()
             .op(Op::infix(eq, Assoc::Left)
                 | Op::infix(ne, Assoc::Left)
@@ -89,8 +89,8 @@ lazy_static::lazy_static! {
             .op(Op::infix(add, Assoc::Left) | Op::infix(sub, Assoc::Left))
             .op(Op::infix(mul, Assoc::Left) | Op::infix(div, Assoc::Left))
             .op(Op::infix(pow, Assoc::Left))
-            .op(Op::prefix(neg))
-            .op(Op::postfix(call) | Op::postfix(factorial))
+            .op(Op::prefix(neg) | Op::prefix(slate))
+            .op(Op::postfix(factorial) | Op::postfix(call))
     };
 }
 
@@ -121,17 +121,22 @@ fn parse_expr(pairs: pest::iterators::Pairs<Rule>) -> Expr {
         })
         .map_prefix(|op, right| match op.as_rule() {
             Rule::neg => Expr::Neg(Box::new(right)),
+            Rule::slate => {
+                let mut args = Vec::new();
+                for slatom in op.into_inner() {
+                    let mut inner = slatom.into_inner();
+                    let name = inner.next().unwrap().to_string();
+                    let val = parse_expr(inner.next().unwrap().into_inner());
+                    args.push((name, val));
+                }
+                
+                Expr::Slate(SlateExpr { inner: Box::new(right), args })
+            }
             _ => unreachable!(),
         })
         .map_postfix(|left, op| match op.as_rule() {
-            Rule::call => {
-                let args = op
-                    .into_inner()
-                    .map(|arg| parse_expr(arg.into_inner()))
-                    .collect();
-                Expr::Call(CallExpr { callee: Box::new(left), args })
-            }
-            Rule::factorial => Expr::Factorial(Box::new(left)), // <-- Handle factorial here
+            Rule::factorial => Expr::Factorial(Box::new(left)),
+            Rule::call => todo!(),
             _ => unreachable!(),
         })
         .map_infix(|left, op, right| {
@@ -146,9 +151,11 @@ fn parse_expr(pairs: pest::iterators::Pairs<Rule>) -> Expr {
                     // haxy (maybe I'll impl references...)
                     if let Expr::Name(name) = left {
                         return Expr::Define(DefineExpr { name, val: Box::new(right), })
-                    } else if let Expr::Call(call) = left {
-                        return Expr::Define(DefineExpr { name: format!("{:?}", call.callee), val: Box::new(right), })
                     }
+                    // todo calls
+                    // else if let Expr::Call(call) = left {
+                    //     return Expr::Define(DefineExpr { name: format!("{:?}", call.callee), val: Box::new(right), })
+                    // }
 
                     BinOp::Eq
                 },

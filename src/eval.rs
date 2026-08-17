@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::parse::*;
 
@@ -56,10 +56,26 @@ fn binevalf(op: BinOp, left: f32, right: f32) -> f32 {
 
 pub struct Todo;
 
+pub fn eval_slate<A: Args>(SlateExpr { inner, args: args_expr }: &SlateExpr, big_args: &A) -> Result<Eval, Todo> {
+    let mut args = HashMap::new();
+    for (name, val) in args_expr {
+        args.insert(name, eval(val, big_args)?);
+    }
+
+    struct StitchArgs<'a, A: Args>(HashMap<&'a String, Eval>, &'a A);
+    impl<'a, A: Args> Args for StitchArgs<'a, A> {
+        fn get(&self, name: &String) -> Option<Eval> {
+            self.0.get(name).cloned().or(self.1.get(name))
+        }
+    }
+
+    eval(inner, &StitchArgs(args, big_args))
+}
+
 pub fn eval<A: Args>(expr: &Expr, args: &A) -> Result<Eval, Todo> {
     let eval = match expr {
         &Expr::Float(f) => Eval::Float(f),
-        Expr::Call(_) => return Err(Todo),
+        Expr::Slate(slate) => eval_slate(slate, args)?,
         Expr::Bin(BinExpr { op, left, right }) => {
             let left = eval(left, args)?;
             let right = eval(right, args)?;
