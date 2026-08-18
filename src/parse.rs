@@ -89,8 +89,8 @@ lazy_static::lazy_static! {
             .op(Op::infix(add, Assoc::Left) | Op::infix(sub, Assoc::Left))
             .op(Op::infix(mul, Assoc::Left) | Op::infix(div, Assoc::Left))
             .op(Op::infix(pow, Assoc::Left))
-            .op(Op::prefix(neg) | Op::prefix(slate))
-            .op(Op::postfix(factorial) | Op::postfix(call))
+            .op(Op::prefix(neg))
+            .op(Op::postfix(factorial) | Op::postfix(slate))
     };
 }
 
@@ -121,6 +121,10 @@ fn parse_expr(pairs: pest::iterators::Pairs<Rule>) -> Expr {
         })
         .map_prefix(|op, right| match op.as_rule() {
             Rule::neg => Expr::Neg(Box::new(right)),
+            _ => unreachable!(),
+        })
+        .map_postfix(|left, op| match op.as_rule() {
+            Rule::factorial => Expr::Factorial(Box::new(left)),
             Rule::slate => {
                 let mut args = Vec::new();
                 for slatom in op.into_inner() {
@@ -130,13 +134,8 @@ fn parse_expr(pairs: pest::iterators::Pairs<Rule>) -> Expr {
                     args.push((name, val));
                 }
                 
-                Expr::Slate(SlateExpr { inner: Box::new(right), args })
+                Expr::Slate(SlateExpr { inner: Box::new(left), args })
             }
-            _ => unreachable!(),
-        })
-        .map_postfix(|left, op| match op.as_rule() {
-            Rule::factorial => Expr::Factorial(Box::new(left)),
-            Rule::call => todo!(),
             _ => unreachable!(),
         })
         .map_infix(|left, op, right| {

@@ -24,13 +24,12 @@ arrow = { "->" }
 infix = _{ arrow | arith_op | logic_op }
 
 neg = { "-" }
-slatom = { name ~ "=" ~ expr }
-slate = { "[" ~ (slatom ~ ("," ~ slatom)*) ~ "]" }
 prefix = _{ slate | neg }
 
 factorial = { "!" }
-call = { "(" ~ (expr ~ ("," ~ expr)*) ~ ")" }
-postfix = _{ call | factorial }
+slatom = { name ~ ":" ~ expr }
+slate = { "(" ~ (slatom ~ ("," ~ slatom)*) ~ ")" }
+postfix = _{ slate | factorial }
 
 // Primaries are the base elements
 circle = { "circle(" ~ (expr ~ ("," ~ expr)*)? ~ ")" }
