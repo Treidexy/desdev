@@ -78,7 +78,10 @@ pub fn eval_slate(SlateExpr { inner, args: args_expr }: &SlateExpr, big_args: &d
 
     let inner = eval(inner, &StitchArgs(small_args, big_args))?;
     let Eval::Function(FunctionEval { inner, params }) = inner else { return Ok(inner) };
-    Eval::Function(())
+    Ok(Eval::Function(FunctionEval {
+        inner: Expr::Slate(SlateExpr { inner: Box::new(inner), args: args_expr.clone() }),
+        params,
+    }))
 }
 
 pub fn eval(expr: &Expr, args: &dyn Args) -> Result<Eval, Todo> {

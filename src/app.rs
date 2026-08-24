@@ -84,6 +84,10 @@ impl Args for MyApp {
 }
 
 impl MyApp {
+    fn code_parse(&mut self, index: usize) {
+        self.lines[index].expr = parse(&self.lines[index].text).ok();
+    }
+
     fn code_eval(&mut self, index: usize) {
         let Some(expr) = self.lines[index].expr.as_ref() else {
             self.lines[index].func = None;
@@ -97,15 +101,15 @@ impl MyApp {
             return;
         };
 
-        let eval = if let Eval::Function(func) = func_eval {
-            let eval = eval(&func.inner, self);
+        if let Eval::Function(func) = func_eval {
             self.lines[index].func = Some(func);
-            eval
+            let eval = eval(&self.lines[index].func.as_ref().unwrap().inner, self);
+            self.lines[index].eval = eval.ok();
         } else {
-            Ok(func_eval)
+            self.lines[index].eval = Some(func_eval);
         };
 
-        if let Ok(Eval::Define(DefineEval { name, .. })) = eval.as_ref() {
+        if let Some(Eval::Define(DefineEval { name, .. })) = self.lines[index].eval.as_ref() {
             // self.assign(assign.clone());
             if let Some(&line_id) = self.vars.get(name) && line_id != self.lines[index].id {
                 // its defined elsewhere
@@ -114,17 +118,18 @@ impl MyApp {
             } else {
                 self.vars.insert(name.clone(), self.lines[index].id);
                 let reval: Vec<usize> = self.lines.iter().enumerate()
-                    .filter(|(_, line)| {
+                    .filter(|(i, line)| {
+                        *i != index &&
                         if let Some(FunctionEval { inner: _, params }) = &line.func {
                             params.contains(name)
                         } else { false }
                     }).map(|(index, _)| index).collect();
                 for index in reval {
+                    dbg!(index);
                     self.code_eval(index);
                 }
             }
         }
-        self.lines[index].eval = eval.ok();
     }
 
     fn assign(&mut self, AssignEval { name, val }: AssignEval) {
@@ -136,7 +141,7 @@ impl MyApp {
             index
         };
         self.lines[index].text = format!("{name} = {val:?}");
-        self.lines[index].expr = parse(&self.lines[index].text).ok();
+        self.code_parse(index);
         self.code_eval(index);
     }
 
@@ -194,7 +199,7 @@ impl eframe::App for MyApp {
                     Some(CodeAction::Remove(index)) => self.remove(index),
                     Some(CodeAction::Focus(index)) => self.focus_request = Some(self.lines[index].id),
                     Some(CodeAction::ParseEval(index)) => {
-                        self.lines[index].expr = parse(&self.lines[index].text).ok();
+                        self.code_parse(index);
                         self.code_eval(index);
                     },
                     Some(CodeAction::Run(index)) => {
