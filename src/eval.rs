@@ -76,7 +76,9 @@ pub fn eval_slate(SlateExpr { inner, args: args_expr }: &SlateExpr, big_args: &d
         }
     }
 
-    eval(inner, &StitchArgs(small_args, big_args))
+    let inner = eval(inner, &StitchArgs(small_args, big_args))?;
+    let Eval::Function(FunctionEval { inner, params }) = inner else { return Ok(inner) };
+    Eval::Function(())
 }
 
 pub fn eval(expr: &Expr, args: &dyn Args) -> Result<Eval, Todo> {
@@ -156,6 +158,8 @@ pub fn eval(expr: &Expr, args: &dyn Args) -> Result<Eval, Todo> {
     Ok(eval)
 }
 
-pub fn stab<A: Args>(function: FunctionEval, args: &A) -> Result<Eval, Todo> {
-    eval(&function.inner, args)
+impl Args for () {
+    fn get(&self, name: &String) -> Option<Eval> {
+        None
+    }
 }

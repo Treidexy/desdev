@@ -11,6 +11,7 @@ struct CodeLine {
     text: String,
     color: Color32,
     expr: Option<Expr>,
+    func: Option<FunctionEval>,
     eval: Option<Eval>,
 }
 
@@ -18,6 +19,7 @@ enum CodeAction {
     Insert(usize),
     Remove(usize),
     Focus(usize),
+    ParseEval(usize),
     Run(usize),
 }
 
@@ -46,6 +48,7 @@ impl Default for MyApp {
             text: "circle(0, 0, 25)".to_owned(),
             color: rand_color(),
             expr: None,
+            func: None,
             eval: None,
         };
         first.expr = parse(&first.text).ok();
@@ -82,21 +85,43 @@ impl Args for MyApp {
 
 impl MyApp {
     fn code_eval(&mut self, index: usize) {
-        let line = &self.lines[index];
-        let Some(expr) = line.expr.as_ref() else {
+        let Some(expr) = self.lines[index].expr.as_ref() else {
+            self.lines[index].func = None;
             self.lines[index].eval = None;
             return;
         };
 
-        let eval = eval(expr, self);
+        let Ok(func_eval) = eval(expr, &()) else {
+            self.lines[index].func = None;
+            self.lines[index].eval = None;
+            return;
+        };
+
+        let eval = if let Eval::Function(func) = func_eval {
+            let eval = eval(&func.inner, self);
+            self.lines[index].func = Some(func);
+            eval
+        } else {
+            Ok(func_eval)
+        };
+
         if let Ok(Eval::Define(DefineEval { name, .. })) = eval.as_ref() {
             // self.assign(assign.clone());
-            if let Some(&line_id) = self.vars.get(name) && line_id != line.id {
+            if let Some(&line_id) = self.vars.get(name) && line_id != self.lines[index].id {
                 // its defined elsewhere
                 self.lines[index].eval = None;
                 println!("alr defined elsewhere");
-            } else {   
-                self.vars.insert(name.clone(), line.id);
+            } else {
+                self.vars.insert(name.clone(), self.lines[index].id);
+                let reval: Vec<usize> = self.lines.iter().enumerate()
+                    .filter(|(_, line)| {
+                        if let Some(FunctionEval { inner: _, params }) = &line.func {
+                            params.contains(name)
+                        } else { false }
+                    }).map(|(index, _)| index).collect();
+                for index in reval {
+                    self.code_eval(index);
+                }
             }
         }
         self.lines[index].eval = eval.ok();
@@ -124,6 +149,7 @@ impl MyApp {
                 text: String::new(),
                 color: rand_color(),
                 expr: None,
+                func: None,
                 eval: None,
             },
         );
@@ -167,6 +193,10 @@ impl eframe::App for MyApp {
                     Some(CodeAction::Insert(index)) => self.insert(index),
                     Some(CodeAction::Remove(index)) => self.remove(index),
                     Some(CodeAction::Focus(index)) => self.focus_request = Some(self.lines[index].id),
+                    Some(CodeAction::ParseEval(index)) => {
+                        self.lines[index].expr = parse(&self.lines[index].text).ok();
+                        self.code_eval(index);
+                    },
                     Some(CodeAction::Run(index)) => {
                         let Some(Eval::Assign(assign)) = &self.lines[index].eval else {
                             panic!("this shouldnt be possible");
@@ -281,9 +311,7 @@ impl MyApp {
         let line = &mut self.lines[index];
         enum Response {
             Egui(egui::Response),
-            Run,
-            Remove,
-            ParseEval,
+            CodeAction(CodeAction),
         }
         let response = ui
             .push_id(line.id, |ui| {
@@ -295,7 +323,7 @@ impl MyApp {
                         },
                         Some(Eval::Assign(_)) => {
                             if ui.button(String::from(char::from(Icon::Play))).clicked() {
-                                return Response::Run;
+                                return Response::CodeAction(CodeAction::Run(index));
                             }
                         },
                         _ => {},
@@ -310,25 +338,28 @@ impl MyApp {
                 if response.changed() {
                     if index > 0 && response.has_focus() && was_empty && ui.input(|i| i.key_pressed(egui::Key::Backspace)) {
                         println!("remove");
-                        return Response::Remove;
+                        return Response::CodeAction(CodeAction::Remove(index));
                     }
-                    return Response::ParseEval;
+                    return Response::CodeAction(CodeAction::ParseEval(index));
                 }
 
                 if let Some(Eval::Define(DefineEval { name, val })) = &line.eval && let Eval::Float(val) = **val {
                     let mut val = val;
                     if ui.add(egui::Slider::new(&mut val, -10.0..=10.0)).changed() {
                         line.text = format!("{name} = {val}");
-                        return Response::ParseEval;
+                        return Response::CodeAction(CodeAction::ParseEval(index));
                     }
                 }
 
                 if let Some(expr) = &line.expr {
                     ui.label(format!("{:?}", expr));
-                }        
+                }
+                if let Some(func) = &line.func {
+                    ui.label(format!("{:?}", func));
+                }
                 if let Some(eval) = &line.eval {
                     if ui.button(format!("{:?}", eval)).clicked() {
-                        return Response::ParseEval;
+                        return Response::CodeAction(CodeAction::ParseEval(index));
                     }
                 }
                 Response::Egui(response)
@@ -336,13 +367,7 @@ impl MyApp {
             .inner;
         let response = match response {
             Response::Egui(response) => response,
-            Response::Run => return Some(CodeAction::Run(index)),
-            Response::Remove => return Some(CodeAction::Remove(index)),
-            Response::ParseEval => {
-                line.expr = parse(&line.text).ok();
-                self.code_eval(index);
-                return None;
-            },
+            Response::CodeAction(action) => return Some(action),
         };
         
         if let Some(focus_request) = self.focus_request && line.id == focus_request {
