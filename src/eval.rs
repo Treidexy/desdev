@@ -120,7 +120,14 @@ pub fn eval(expr: &Expr, args: &dyn Args) -> Result<Eval, Todo> {
             }),
             _ => return Err(Todo),
         },
-        Expr::Factorial(..) => return Err(Todo),
+        Expr::Factorial(e) => match eval(e, args)? {
+            Eval::Float(f) => Eval::Float(libm::tgammaf(f + 1.0)),
+            Eval::Function(f) => Eval::Function(FunctionEval {
+                inner: Expr::Factorial(Box::new(f.inner)),
+                params: f.params,
+            }),
+            _ => return Err(Todo),
+        },
         Expr::Name(name) =>
             if let Some(val) = args.get(name) {
                 val
@@ -162,7 +169,7 @@ pub fn eval(expr: &Expr, args: &dyn Args) -> Result<Eval, Todo> {
 }
 
 impl Args for () {
-    fn get(&self, name: &String) -> Option<Eval> {
+    fn get(&self, _name: &String) -> Option<Eval> {
         None
     }
 }

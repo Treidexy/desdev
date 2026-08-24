@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use pest::{Parser, pratt_parser::{Assoc, Op, PrattParser}};
 use pest_derive::Parser;
 

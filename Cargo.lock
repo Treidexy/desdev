@@ -847,6 +847,7 @@ dependencies = [
  "egui_extras",
  "env_logger",
  "lazy_static",
+ "libm",
  "log",
  "lucide-icons",
  "pest",
