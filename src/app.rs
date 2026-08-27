@@ -45,7 +45,7 @@ impl Default for MyApp {
     fn default() -> Self {
         let mut first = CodeLine {
             id: 0,
-            text: "circle(0, 0, 25)".to_owned(),
+            text: "circle(x: 0, y: 0, r: 25)".to_owned(),
             color: rand_color(),
             expr: None,
             func: None,

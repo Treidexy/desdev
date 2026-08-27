@@ -32,7 +32,7 @@ slate = { "(" ~ (slatom ~ ("," ~ slatom)*) ~ ")" }
 postfix = _{ slate | factorial }
 
 // Primaries are the base elements
-circle = { "circle(" ~ (expr ~ ("," ~ expr)*)? ~ ")" }
+circle = { "circle" ~ "(" ~ "x" ~ ":"  ~ expr ~ "," ~ "y" ~ ":" ~ expr ~ "," ~ "r" ~ ":" ~ expr ~ ")" }
 primary = _{ circle | number | name | "(" ~ expr ~ ")" }
 
 // The exact flat structure the Pest Pratt parser expects
