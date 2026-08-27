@@ -42,15 +42,13 @@ pub trait Args {
     fn get(&self, name: &String) -> Option<Eval>;
 }
 
-fn binevalf(op: BinOp, left: f32, right: f32) -> f32 {
+fn arithevalf(op: ArithOp, left: f32, right: f32) -> f32 {
     match op {
-        BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge | BinOp::Arrow => unreachable!(),
-
-        BinOp::Add => left + right,
-        BinOp::Sub => left - right,
-        BinOp::Mul => left * right,
-        BinOp::Div => left / right,
-        BinOp::Pow => left.powf(right),
+        ArithOp::Add => left + right,
+        ArithOp::Sub => left - right,
+        ArithOp::Mul => left * right,
+        ArithOp::Div => left / right,
+        ArithOp::Pow => left.powf(right),
     }
 }
 
@@ -86,13 +84,16 @@ pub fn eval_slate(SlateExpr { inner, args: args_expr }: &SlateExpr, big_args: &d
 
 pub fn eval(expr: &Expr, args: &dyn Args) -> Result<Eval, Todo> {
     let eval = match expr {
+        Expr::Bad => return Err(Todo),
+        Expr::Question => return Err(Todo),
+        
         &Expr::Float(f) => Eval::Float(f),
         Expr::Slate(slate) => eval_slate(slate, args)?,
-        Expr::Bin(BinExpr { op, left, right }) => {
+        Expr::Arith(ArithExpr { op, left, right }) => {
             let left = eval(left, args)?;
             let right = eval(right, args)?;
             let (left, right, params) = match (left, right) {
-                (Eval::Float(left), Eval::Float(right)) => return Ok(Eval::Float(binevalf(*op, left, right))),
+                (Eval::Float(left), Eval::Float(right)) => return Ok(Eval::Float(arithevalf(*op, left, right))),
                 (Eval::Float(left), Eval::Function(right)) => (Expr::Float(left), right.inner, right.params),
                 (Eval::Function(left), Eval::Float(right)) => (left.inner, Expr::Float(right), left.params),
                 (Eval::Function(left), Eval::Function(right)) => (
@@ -104,7 +105,7 @@ pub fn eval(expr: &Expr, args: &dyn Args) -> Result<Eval, Todo> {
             };
 
             Eval::Function(FunctionEval {
-                inner: Expr::Bin(BinExpr {
+                inner: Expr::Arith(ArithExpr {
                     op: *op,
                     left: Box::new(left),
                     right: Box::new(right),
@@ -138,7 +139,6 @@ pub fn eval(expr: &Expr, args: &dyn Args) -> Result<Eval, Todo> {
                 })
             },
 
-        Expr::Bad => return Err(Todo),
         Expr::Circle(CircleExpr { x, y, r }) => {
             let x = eval(x, args)?;
             let y = eval(y, args)?;
@@ -163,6 +163,7 @@ pub fn eval(expr: &Expr, args: &dyn Args) -> Result<Eval, Todo> {
                 val: Box::new(val)
             })
         }
+        Expr::Logic(..) => return Err(Todo),
     };
 
     Ok(eval)
