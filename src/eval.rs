@@ -164,6 +164,7 @@ pub fn eval(expr: &Expr, args: &dyn Args) -> Result<Eval, Todo> {
             })
         }
         Expr::Logic(..) => return Err(Todo),
+        Expr::Train(_) => return Err(Todo),
     };
 
     Ok(eval)

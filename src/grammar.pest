@@ -42,4 +42,5 @@ secondary = _{ prefix* ~ primary ~ postfix* }
 expr = { secondary ~ (binfix ~ secondary)* }
 train = { expr ~ (logic_op ~ expr)* }
 
-line = _{ SOI ~ train ~ EOI }
+line_withouteoi = { train }
+line = _{ SOI ~ line_withouteoi ~ EOI }

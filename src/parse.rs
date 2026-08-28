@@ -11,6 +11,7 @@ pub enum Expr {
     Slate(SlateExpr),
     Arith(ArithExpr),
     Logic(LogicExpr),
+    Train(TrainExpr),
     
     Neg(Box<Expr>),
     Factorial(Box<Expr>),
@@ -27,6 +28,13 @@ pub struct SlateExpr {
 
 #[derive(Debug, Clone)]
 pub struct LogicExpr {
+    pub op: LogicOp,
+    pub left: Box<Expr>,
+    pub right: Box<Expr>,
+}
+
+#[derive(Debug, Clone)]
+pub struct TrainExpr {
     pub glue: Vec<LogicOp>,
     pub carts: Vec<Expr>,
 }
@@ -126,36 +134,63 @@ fn parse_expr(pairs: pest::iterators::Pairs<Rule>) -> Expr {
             Rule::expr => parse_expr(primary.into_inner()),
             
             Rule::train => {
+                let mut args = primary.into_inner();
+                let Some(left) = args.next() else {
+                    return Expr::Bad;
+                };
+                let left = parse_expr(left.into_inner());
+                if args.is_empty() {
+                    return left;
+                }
+                
+                let Some(op) = args.next() else {
+                    return Expr::Bad;
+                };
+                let Some(right) = args.next() else {
+                    return Expr::Bad;
+                };
+                let right = parse_expr(right.into_inner());
+                let op = match op.as_rule() {
+                    Rule::eq  => {
+                        // haxy (maybe I'll impl references...)
+                        if let Expr::Name(name) = left {
+                            return Expr::Define(DefineExpr { name, val: Box::new(right), })
+                        }
+                        // todo calls
+                        // else if let Expr::Call(call) = left {
+                        //     return Expr::Define(DefineExpr { name: format!("{:?}", call.callee), val: Box::new(right), })
+                        // }
+
+                        LogicOp::Eq
+                    },
+                    Rule::ne => LogicOp::Ne,
+                    Rule::lt  => LogicOp::Lt,
+                    Rule::le => LogicOp::Le,
+                    Rule::gt  => LogicOp::Gt,
+                    Rule::ge => LogicOp::Ge,
+                    _ => return Expr::Bad,
+                };
+
+                if args.is_empty() {
+                    return Expr::Logic(LogicExpr { op, left: Box::new(left), right: Box::new(right) })
+                }
+
                 let mut glue = Vec::new();
                 let mut carts = Vec::new();
 
-                let mut args = primary.into_inner();
-                let Some(first) = args.next() else {
-                    return Expr::Bad;
-                };
-                let first = parse_expr(first.into_inner());
-                carts.push(first);
+                carts.push(left);
+                glue.push(op);
+                carts.push(right);
                 while !args.is_empty() {
                     let Some(op) = args.next() else {
                         return Expr::Bad;
                     };
                     let op = match op.as_rule() {
-                        Rule::eq  => {
-                            // haxy (maybe I'll impl references...)
-                            // if let Expr::Name(name) = left {
-                            //     return Expr::Define(DefineExpr { name, val: Box::new(right), })
-                            // }
-                            // todo calls
-                            // else if let Expr::Call(call) = left {
-                            //     return Expr::Define(DefineExpr { name: format!("{:?}", call.callee), val: Box::new(right), })
-                            // }
-
-                            LogicOp::Eq
-                        },
+                        Rule::eq => LogicOp::Eq,
                         Rule::ne => LogicOp::Ne,
-                        Rule::lt  => LogicOp::Lt,
+                        Rule::lt => LogicOp::Lt,
                         Rule::le => LogicOp::Le,
-                        Rule::gt  => LogicOp::Gt,
+                        Rule::gt => LogicOp::Gt,
                         Rule::ge => LogicOp::Ge,
                         _ => return Expr::Bad,
                     };
@@ -168,9 +203,9 @@ fn parse_expr(pairs: pest::iterators::Pairs<Rule>) -> Expr {
                     carts.push(cart);
                 }
 
-                Expr::Logic(LogicExpr { glue, carts, })
-            }
-        rule => unreachable!("Expected atom, found {:?}", rule),
+                Expr::Train(TrainExpr { glue, carts, })
+            },
+            rule => unreachable!("Expected atom, found {:?}", rule),
         })
         .map_prefix(|op, right| match op.as_rule() {
             Rule::neg => Expr::Neg(Box::new(right)),
