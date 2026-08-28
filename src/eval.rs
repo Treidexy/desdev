@@ -42,16 +42,6 @@ pub trait Args {
     fn get(&self, name: &String) -> Option<Eval>;
 }
 
-fn arithevalf(op: ArithOp, left: f32, right: f32) -> f32 {
-    match op {
-        ArithOp::Add => left + right,
-        ArithOp::Sub => left - right,
-        ArithOp::Mul => left * right,
-        ArithOp::Div => left / right,
-        ArithOp::Pow => left.powf(right),
-    }
-}
-
 pub struct Todo;
 
 pub fn eval_slate(SlateExpr { inner, args: args_expr }: &SlateExpr, big_args: &dyn Args) -> Result<Eval, Todo> {
@@ -93,7 +83,13 @@ pub fn eval(expr: &Expr, args: &dyn Args) -> Result<Eval, Todo> {
             let left = eval(left, args)?;
             let right = eval(right, args)?;
             let (left, right, params) = match (left, right) {
-                (Eval::Float(left), Eval::Float(right)) => return Ok(Eval::Float(arithevalf(*op, left, right))),
+                (Eval::Float(left), Eval::Float(right)) => return Ok(Eval::Float(match op {
+                        ArithOp::Add => left + right,
+                        ArithOp::Sub => left - right,
+                        ArithOp::Mul => left * right,
+                        ArithOp::Div => left / right,
+                        ArithOp::Pow => left.powf(right),
+                    })),
                 (Eval::Float(left), Eval::Function(right)) => (Expr::Float(left), right.inner, right.params),
                 (Eval::Function(left), Eval::Float(right)) => (left.inner, Expr::Float(right), left.params),
                 (Eval::Function(left), Eval::Function(right)) => (
@@ -163,7 +159,38 @@ pub fn eval(expr: &Expr, args: &dyn Args) -> Result<Eval, Todo> {
                 val: Box::new(val)
             })
         }
-        Expr::Logic(..) => return Err(Todo),
+        // Maybe have dedicate bool type?
+        Expr::Logic(LogicExpr { op, left, right }) => {
+            let left = eval(left, args)?;
+            let right = eval(right, args)?;
+            let (left, right, params) = match (left, right) {
+                (Eval::Float(left), Eval::Float(right)) => return Ok(Eval::Float(match op {
+                        LogicOp::Eq => left == right,
+                        LogicOp::Ne => left != right,
+                        LogicOp::Lt => left < right,
+                        LogicOp::Le => left <= right,
+                        LogicOp::Gt => left > right,
+                        LogicOp::Ge => left >= right,
+                    }.into())),
+                (Eval::Float(left), Eval::Function(right)) => (Expr::Float(left), right.inner, right.params),
+                (Eval::Function(left), Eval::Float(right)) => (left.inner, Expr::Float(right), left.params),
+                (Eval::Function(left), Eval::Function(right)) => (
+                    left.inner,
+                    right.inner,
+                    left.params.into_iter().chain(right.params).collect(),
+                ),
+                _ => return Err(Todo),
+            };
+
+            Eval::Function(FunctionEval {
+                inner: Expr::Logic(LogicExpr {
+                    op: *op,
+                    left: Box::new(left),
+                    right: Box::new(right),
+                }),
+                params,
+            })
+        },
         Expr::Train(_) => return Err(Todo),
     };
 

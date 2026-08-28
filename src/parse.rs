@@ -39,7 +39,7 @@ pub struct TrainExpr {
     pub carts: Vec<Expr>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum LogicOp {
     Eq,
     Ne,
