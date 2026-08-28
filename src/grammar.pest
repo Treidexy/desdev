@@ -34,13 +34,14 @@ postfix = _{ slate | factorial }
 
 // Primaries are the base elements
 circle = { "circle" ~ "(" ~ "x" ~ ":"  ~ expr ~ "," ~ "y" ~ ":" ~ expr ~ "," ~ "r" ~ ":" ~ expr ~ ")" }
+//list = { "[" ~  ~ "]" }
 question = { "?" }
 primary = _{ circle | number | name | "(" ~ expr ~ ")" | question }
 
 // The exact flat structure the Pest Pratt parser expects
 secondary = _{ prefix* ~ primary ~ postfix* }
-expr = { secondary ~ (binfix ~ secondary)* }
-train = { expr ~ (logic_op ~ expr)* }
+thirdary = { secondary ~ (binfix ~ secondary)* }
+expr = { thirdary ~ (logic_op ~ thirdary)* }
 
-line_withouteoi = { train }
+line_withouteoi = { expr }
 line = _{ SOI ~ line_withouteoi ~ EOI }

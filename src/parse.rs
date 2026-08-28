@@ -131,9 +131,9 @@ fn parse_expr(pairs: pest::iterators::Pairs<Rule>) -> Expr {
             Rule::name => Expr::Name(primary.as_str().to_string()),
             Rule::question => Expr::Question,
             // If it's parentheses, we evaluate the inner expression
-            Rule::expr => parse_expr(primary.into_inner()),
+            Rule::thirdary => parse_expr(primary.into_inner()),
             
-            Rule::train => {
+            Rule::expr => {
                 let mut args = primary.into_inner();
                 let Some(left) = args.next() else {
                     return Expr::Bad;
