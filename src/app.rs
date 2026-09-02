@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
 use eframe::egui::{self, Color32};
+use egui_toast::{Toast, ToastOptions, ToastStyle, Toasts};
+use log::{debug, error, info};
 use lucide_icons::Icon;
 use rand::seq::IndexedRandom;
 use serde_json::json;
@@ -39,6 +41,7 @@ struct MyApp {
 
 pub fn creator(cc: &eframe::CreationContext) -> Result<Box<dyn eframe::App>, Box<dyn std::error::Error + Send + Sync>> {
     setup_fonts(&cc.egui_ctx);
+    cc.egui_ctx.set_theme(egui::Theme::Light);
     Ok(Box::<MyApp>::default())
 }
 
@@ -115,7 +118,7 @@ impl MyApp {
             if let Some(&line_id) = self.vars.get(name) && line_id != self.lines[index].id {
                 // its defined elsewhere
                 self.lines[index].eval = None;
-                println!("alr defined elsewhere");
+                error!("alr defined elsewhere");
             } else {
                 self.vars.insert(name.clone(), self.lines[index].id);
                 let reval: Vec<usize> = self.lines.iter().enumerate()
@@ -180,12 +183,24 @@ impl eframe::App for MyApp {
             ui.heading("Engine");
         });
 
+        let mut toasts = Toasts::new();
+
         let mut code_panel_open = self.code_panel_open;
         if code_panel_open {
             egui::Panel::left("code_edit").show(ui, |ui| {
                 egui::Sides::new().show(ui, |ui| {
                     if ui.button(String::from(char::from(Icon::Share))).clicked() {
-                        println!("{}", self.to_json());
+                        info!("{}", self.to_json());
+                        ui.copy_text(self.to_json());
+                        toasts.add(Toast {
+                            text: "Copied".into(),
+                            options: ToastOptions::default().duration_in_seconds(6.7),
+                            style: ToastStyle {
+                                info_icon: egui::WidgetText::Text(String::from(char::from(Icon::ClipboardCheck))),
+                                ..Default::default()
+                            },
+                            ..Default::default()
+                        });
                     }
                 }, |ui| {
                     if ui.button(String::from(char::from(Icon::PanelLeftClose))).clicked() {
@@ -291,7 +306,7 @@ impl eframe::App for MyApp {
             }
 
             if response.clicked() {
-                println!("Canvas clicked at: {:?}", response.interact_pointer_pos());
+                debug!("Canvas clicked at: {:?}", response.interact_pointer_pos());
             }
         });
 
@@ -315,6 +330,7 @@ impl eframe::App for MyApp {
                     self.pan /= 2.0;
                 }
             });
+        toasts.show(ui);
     }
 }
 
@@ -349,7 +365,6 @@ impl MyApp {
                 };
                 if response.changed() {
                     if index > 0 && response.has_focus() && was_empty && ui.input(|i| i.key_pressed(egui::Key::Backspace)) {
-                        println!("remove");
                         return Response::CodeAction(CodeAction::Remove(index));
                     }
                     return Response::CodeAction(CodeAction::ParseEval(index));
