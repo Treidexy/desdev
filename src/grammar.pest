@@ -41,7 +41,10 @@ primary = _{ circle | number | name | "(" ~ expr ~ ")" | question }
 // The exact flat structure the Pest Pratt parser expects
 secondary = _{ prefix* ~ primary ~ postfix* }
 thirdary = { secondary ~ (binfix ~ secondary)* }
-expr = { thirdary ~ (logic_op ~ thirdary)* }
+train = { thirdary ~ logic_op ~ thirdary ~ (logic_op ~ thirdary)+ }
+logic = { thirdary ~ logic_op ~ thirdary }
+define = { name ~ "=" ~ expr }
+expr = { train | define | logic | thirdary }
 
 line_withouteoi = { expr }
 line = _{ SOI ~ line_withouteoi ~ EOI }

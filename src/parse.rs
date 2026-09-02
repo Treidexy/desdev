@@ -132,8 +132,36 @@ fn parse_expr(pairs: pest::iterators::Pairs<Rule>) -> Expr {
             Rule::question => Expr::Question,
             // If it's parentheses, we evaluate the inner expression
             Rule::thirdary => parse_expr(primary.into_inner()),
+            Rule::expr => parse_expr(primary.into_inner()),
             
-            Rule::expr => {
+            Rule::logic => {
+                let mut args = primary.into_inner();
+                let Some(left) = args.next() else {
+                    return Expr::Bad;
+                };
+                let left = parse_expr(left.into_inner());
+                
+                let Some(op) = args.next() else {
+                    return Expr::Bad;
+                };
+                let op = match op.as_rule() {
+                    Rule::eq => LogicOp::Eq,
+                    Rule::ne => LogicOp::Ne,
+                    Rule::lt => LogicOp::Lt,
+                    Rule::le => LogicOp::Le,
+                    Rule::gt => LogicOp::Gt,
+                    Rule::ge => LogicOp::Ge,
+                    _ => return Expr::Bad,
+                };
+
+                let Some(right) = args.next() else {
+                    return Expr::Bad;
+                };
+                let right = parse_expr(right.into_inner());
+
+                Expr::Logic(LogicExpr { op, left: Box::new(left), right: Box::new(right) })
+            },
+            Rule::train => {
                 let mut args = primary.into_inner();
                 let Some(left) = args.next() else {
                     return Expr::Bad;
@@ -151,22 +179,11 @@ fn parse_expr(pairs: pest::iterators::Pairs<Rule>) -> Expr {
                 };
                 let right = parse_expr(right.into_inner());
                 let op = match op.as_rule() {
-                    Rule::eq  => {
-                        // haxy (maybe I'll impl references...)
-                        if let Expr::Name(name) = left {
-                            return Expr::Define(DefineExpr { name, val: Box::new(right), })
-                        }
-                        // todo calls
-                        // else if let Expr::Call(call) = left {
-                        //     return Expr::Define(DefineExpr { name: format!("{:?}", call.callee), val: Box::new(right), })
-                        // }
-
-                        LogicOp::Eq
-                    },
+                    Rule::eq => LogicOp::Eq,
                     Rule::ne => LogicOp::Ne,
-                    Rule::lt  => LogicOp::Lt,
+                    Rule::lt => LogicOp::Lt,
                     Rule::le => LogicOp::Le,
-                    Rule::gt  => LogicOp::Gt,
+                    Rule::gt => LogicOp::Gt,
                     Rule::ge => LogicOp::Ge,
                     _ => return Expr::Bad,
                 };
@@ -205,6 +222,16 @@ fn parse_expr(pairs: pest::iterators::Pairs<Rule>) -> Expr {
 
                 Expr::Train(TrainExpr { glue, carts, })
             },
+            Rule::define => {
+                let mut args = primary.into_inner();
+                let left = args.next().unwrap();
+                let right = args.next().unwrap();
+
+                let name = left.to_string();
+                let right = parse_expr(right.into_inner());
+
+                Expr::Define(DefineExpr { name, val: Box::new(right), })
+            }
             rule => unreachable!("Expected atom, found {:?}", rule),
         })
         .map_prefix(|op, right| match op.as_rule() {
