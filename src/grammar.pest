@@ -4,13 +4,6 @@ number = @{ ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? }
 name  = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }
 
 // Operators
-add = { "+" }
-sub = { "-" }
-mul = { "*" }
-div = { "/" }
-pow = { "^" }
-arith_op = _{ add | sub | mul | div | pow }
-
 eq  = { "=" }
 ne = { "!=" }
 le = { "<=" }
@@ -19,9 +12,17 @@ ge = { ">=" }
 gt  = { ">" }
 logic_op = _{ eq | ne | le | lt | ge | gt }
 
+
+add = { "+" }
+sub = { "-" }
+mul = { "*" }
+div = { "/" }
+pow = { "^" }
+arith_op = _{ add | sub | mul | div | pow }
+
 arrow = { "->" }
 
-infix = _{ arrow | arith_op | logic_op }
+binfix = _{ arrow | arith_op }
 
 neg = { "-" }
 prefix = _{ slate | neg }
@@ -32,11 +33,14 @@ slate = { "(" ~ (slatom ~ ("," ~ slatom)*) ~ ")" }
 postfix = _{ slate | factorial }
 
 // Primaries are the base elements
-circle = { "circle(" ~ (expr ~ ("," ~ expr)*)? ~ ")" }
-primary = _{ circle | number | name | "(" ~ expr ~ ")" }
+circle = { "circle" ~ "(" ~ "x" ~ ":"  ~ expr ~ "," ~ "y" ~ ":" ~ expr ~ "," ~ "r" ~ ":" ~ expr ~ ")" }
+question = { "?" }
+primary = _{ circle | number | name | "(" ~ expr ~ ")" | question }
 
 // The exact flat structure the Pest Pratt parser expects
 secondary = _{ prefix* ~ primary ~ postfix* }
-expr = { secondary ~ (infix ~ secondary)* }
+expr = { secondary ~ (binfix ~ secondary)* }
+train = { expr ~ (logic_op ~ expr)* }
 
-line = _{ SOI ~ expr ~ EOI }
+line_withouteoi = { train }
+line = _{ SOI ~ line_withouteoi ~ EOI }
