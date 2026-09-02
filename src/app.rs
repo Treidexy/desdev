@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use eframe::egui::{self, Color32};
 use lucide_icons::Icon;
 use rand::seq::IndexedRandom;
+use serde_json::json;
 
 use crate::{eval::*, parse::*};
 
@@ -179,11 +180,16 @@ impl eframe::App for MyApp {
             ui.heading("Engine");
         });
 
-        if self.code_panel_open {
+        let mut code_panel_open = self.code_panel_open;
+        if code_panel_open {
             egui::Panel::left("code_edit").show(ui, |ui| {
-                egui::Sides::new().show(ui, |_ui| {}, |ui| {
+                egui::Sides::new().show(ui, |ui| {
+                    if ui.button(String::from(char::from(Icon::Share))).clicked() {
+                        println!("{}", self.to_json());
+                    }
+                }, |ui| {
                     if ui.button(String::from(char::from(Icon::PanelLeftClose))).clicked() {
-                        self.code_panel_open = false;
+                        code_panel_open = false;
                     }
                 });
 
@@ -210,6 +216,7 @@ impl eframe::App for MyApp {
                     }
                 }
             });
+            self.code_panel_open = code_panel_open;
         } else {
             egui::Area::new(egui::Id::new("top_left_area"))
                 .fixed_pos(heading_res.response.rect.left_bottom() + egui::vec2(10.0, 10.0))
@@ -390,6 +397,35 @@ impl MyApp {
         }
 
         return None;
+    }
+}
+
+impl MyApp {
+    fn to_json(&self) -> String {
+        let lines: Vec<serde_json::Value> = self.lines.iter().map(|line| {
+            json!({
+                "type": "expression",
+                "id": line.id,
+                "latex": line.text,
+                "color": line.color.to_hex(),
+            })
+        }).collect();
+
+        let state = json!({
+            "graph": {
+                "viewport": {
+                    "xmin": -10,
+                    "xmax": 10,
+                    "ymin": 0,
+                    "ymax": 0,
+                },
+            },
+            "expressions": {
+                "list": lines,
+            },
+        });
+        
+        state.to_string()
     }
 }
 
