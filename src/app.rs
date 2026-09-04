@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use eframe::egui::{self, Color32};
+use eframe::egui::{self, Color32, ScrollArea};
 use egui_toast::{Toast, ToastOptions, ToastStyle, Toasts};
 use log::{debug, error, info};
 use lucide_icons::Icon;
@@ -144,9 +144,12 @@ impl MyApp {
             self.insert(index - 1);
             index
         };
-        self.lines[index].text = format!("{name} = {val:?}");
-        self.code_parse(index);
-        self.code_eval(index);
+        // todo: general eval
+        if let Eval::Float(f) = *val {
+            self.lines[index].text = format!("{name} = {f}");
+            self.code_parse(index);
+            self.code_eval(index);
+        }
     }
 
     fn insert(&mut self, after_index: usize) {
@@ -210,10 +213,13 @@ impl eframe::App for MyApp {
                 ui.separator();
 
                 // should this be part of self?
-                let mut action = None;
-                for i in 0..self.lines.len() {
-                    action = action.or(self.show_code_line(i, ui));
-                }
+                let action = ScrollArea::vertical().show(ui, |ui| {
+                    let mut action = None;
+                    for i in 0..self.lines.len() {
+                        action = action.or(self.show_code_line(i, ui));
+                    }
+                    action
+                }).inner;
 
                 match action {
                     None => {},

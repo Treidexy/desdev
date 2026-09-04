@@ -126,7 +126,16 @@ pub fn eval(expr: &Expr, args: &dyn Args) -> Result<Eval, Todo> {
             _ => return Err(Todo),
         },
         Expr::Name(name) =>
-            if let Some(val) = args.get(name) {
+            if name == "circle" {
+                Eval::Function(FunctionEval {
+                    inner: Expr::Circle(CircleExpr {
+                        x: Box::new(Expr::Name("x".into())),
+                        y: Box::new(Expr::Name("y".into())),
+                        r: Box::new(Expr::Name("r".into()))
+                    }),
+                    params: HashSet::from(["x","y","r"].map(str::to_string))
+                })
+            } else if let Some(val) = args.get(name) {
                 val
             } else {
                 Eval::Function(FunctionEval {
