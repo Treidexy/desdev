@@ -194,7 +194,7 @@ impl eframe::App for MyApp {
                         ui.copy_text(self.to_json());
                         toasts.add(Toast {
                             text: "Copied".into(),
-                            options: ToastOptions::default().duration_in_seconds(6.7),
+                            options: ToastOptions::default().duration_in_seconds(2.0),
                             style: ToastStyle {
                                 info_icon: egui::WidgetText::Text(String::from(char::from(Icon::ClipboardCheck))),
                                 ..Default::default()
@@ -207,6 +207,7 @@ impl eframe::App for MyApp {
                         code_panel_open = false;
                     }
                 });
+                ui.separator();
 
                 // should this be part of self?
                 let mut action = None;
