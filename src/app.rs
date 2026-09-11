@@ -357,11 +357,13 @@ impl MyApp {
                             ui.color_edit_button_srgba(&mut line.color);
                         },
                         Some(Eval::Assign(_)) => {
-                            if ui.button(String::from(char::from(Icon::Play))).clicked() {
+                            if ui.button(String::from(char::from(Icon::MoveRight))).clicked() {
                                 return Response::CodeAction(CodeAction::Run(index));
                             }
                         },
-                        _ => {},
+                        _ => {
+                            let _ = ui.button("");
+                        },
                     };
                     let response = ui.text_edit_singleline(&mut line.text);
                     Response::Egui(response)

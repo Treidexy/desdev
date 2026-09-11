@@ -3,8 +3,9 @@
 use log::{debug, error, info, warn};
 
 mod app;
-mod parse;
+mod desmos;
 mod eval;
+mod parse;
 
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> eframe::Result {
@@ -16,11 +17,7 @@ fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
         ..Default::default()
     };
-    eframe::run_native(
-        "desdev",
-        options,
-        Box::new(app::creator),
-    )
+    eframe::run_native("desdev", options, Box::new(app::creator))
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -33,7 +30,11 @@ fn main() {
 
         let window = web_sys::window().unwrap();
         let document = window.document().unwrap();
-        let canvas: web_sys::HtmlCanvasElement = document.get_element_by_id("the_canvas_id").unwrap().dyn_into().unwrap();
+        let canvas: web_sys::HtmlCanvasElement = document
+            .get_element_by_id("the_canvas_id")
+            .unwrap()
+            .dyn_into()
+            .unwrap();
         let start_result = eframe::WebRunner::new()
             .start(canvas, web_options, Box::new(app::creator))
             .await;
